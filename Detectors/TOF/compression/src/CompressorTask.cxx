@@ -33,10 +33,12 @@ void CompressorTask::init(InitContext& ic)
 {
   LOG(INFO) << "Compressor init";
 
+  auto decoderCONET = ic.options().get<bool>("decoder-CONET");
   auto decoderVerbose = ic.options().get<bool>("decoder-verbose");
   auto encoderVerbose = ic.options().get<bool>("encoder-verbose");
   auto checkerVerbose = ic.options().get<bool>("checker-verbose");
 
+  mCompressor.setDecoderCONET(decoderCONET);
   mCompressor.setDecoderVerbose(decoderVerbose);
   mCompressor.setEncoderVerbose(encoderVerbose);
   mCompressor.setCheckerVerbose(checkerVerbose);

@@ -55,7 +55,7 @@ void CompressedInspectorTask::init(InitContext& ic)
   mHistos1D["tot"] = new TH1F("hTOT", ";ToT (48.8 ps)", 2048, 0., 2048.);
   mHistos1D["indexE"] = new TH1F("hIndexE", ";index EO", 172800, 0., 172800.);
   mHistos2D["slotEnableMask"] = new TH2F("hSlotEnableMask", ";crate;slot", 72, 0., 72., 12, 1., 13.);
-  mHistos2D["diagnostic"] = new TH2F("hDiagnostic", ";crate;slot", 72, 0., 72., 12, 1., 13.);
+  mHistos2D["diagnostic"] = new TH2F("hDiagnostic", ";crate;slot", 72, 0., 72., 13, 0., 13.);
 
   auto finishFunction = [this]() {
     LOG(INFO) << "CompressedInspector finish";
@@ -124,6 +124,7 @@ void CompressedInspectorTask::frameHandler(const CrateHeader_t* crateHeader, con
 void CompressedInspectorTask::trailerHandler(const CrateHeader_t* crateHeader, const CrateOrbit_t* crateOrbit,
                                              const CrateTrailer_t* crateTrailer, const Diagnostic_t* diagnostics)
 {
+  mHistos2D["diagnostic"]->Fill(crateHeader->drmID, 0);
   for (int i = 0; i < crateTrailer->numberOfDiagnostics; ++i) {
     auto diagnostic = diagnostics + i;
     mHistos2D["diagnostic"]->Fill(crateHeader->drmID, diagnostic->slotID);

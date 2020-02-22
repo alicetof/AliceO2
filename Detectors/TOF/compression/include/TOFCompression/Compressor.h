@@ -38,6 +38,10 @@ class Compressor
   inline bool run()
   {
     rewind();
+    if (mDecoderCONET) {
+      mDecoderPointerMax = reinterpret_cast<const uint32_t*>(mDecoderBuffer + mDecoderBufferSize);
+      return processDRM();
+    }
     while (!processHBF())
       ;
     return false;
@@ -51,6 +55,12 @@ class Compressor
 
   void checkSummary();
   void resetCounters();
+
+  void setDecoderCONET(bool val)
+  {
+    mDecoderCONET = val;
+    mDecoderNextWordStep = val ? 0 : 2;
+  };
 
   void setDecoderVerbose(bool val) { mDecoderVerbose = val; };
   void setEncoderVerbose(bool val) { mEncoderVerbose = val; };
@@ -71,6 +81,9 @@ class Compressor
  protected:
   bool processHBF();
   bool processDRM();
+  bool processLTM();
+  bool processTRM();
+  bool processTRMchain(int itrm, int ichain);
 
   /** decoder private functions and data members **/
 
@@ -81,7 +94,7 @@ class Compressor
     mDecoderPointer += mDecoderNextWord;
     //    mDecoderNextWord = mDecoderNextWord == 1 ? 3 : 1;
     //    mDecoderNextWord = (mDecoderNextWord + 2) % 4;
-    mDecoderNextWord = (mDecoderNextWord + 2) & 0x3;
+    mDecoderNextWord = (mDecoderNextWord + mDecoderNextWordStep) & 0x3;
   };
 
   int mJumpRDH = 0;
@@ -93,7 +106,9 @@ class Compressor
   const uint32_t* mDecoderPointerMax = nullptr;
   const uint32_t* mDecoderPointerNext = nullptr;
   uint8_t mDecoderNextWord = 1;
+  uint8_t mDecoderNextWordStep = 2;
   const o2::header::RAWDataHeader* mDecoderRDH;
+  bool mDecoderCONET = false;
   bool mDecoderVerbose = false;
   bool mDecoderError = false;
   bool mDecoderFatal = false;

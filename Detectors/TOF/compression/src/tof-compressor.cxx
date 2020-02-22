@@ -50,6 +50,7 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
     outputs,
     AlgorithmSpec{adaptFromTask<o2::tof::CompressorTask>()},
     Options{
+      {"decoder-CONET", VariantType::Bool, false, {"Decoder CONET flag"}},
       {"decoder-verbose", VariantType::Bool, false, {"Decoder verbose flag"}},
       {"encoder-verbose", VariantType::Bool, false, {"Encoder verbose flag"}},
       {"checker-verbose", VariantType::Bool, false, {"Checker verbose flag"}}}});
