@@ -67,9 +67,11 @@ struct WritingCursor<soa::Table<PC...>> {
   using persistent_table_t = soa::Table<PC...>;
   using cursor_t = decltype(std::declval<TableBuilder>().cursor<persistent_table_t>());
 
-  void operator()(typename PC::type... args)
+  template <typename... T>
+  void operator()(T... args)
   {
-    cursor(0, args...);
+    static_assert(sizeof...(PC) == sizeof...(T), "Argument number mismatch");
+    cursor(0, extract(args)...);
   }
 
   bool resetCursor(TableBuilder& builder)
@@ -79,6 +81,18 @@ struct WritingCursor<soa::Table<PC...>> {
   }
 
   decltype(FFL(std::declval<cursor_t>())) cursor;
+
+ private:
+  template <typename T>
+  static decltype(auto) extract(T const& arg)
+  {
+    if constexpr (is_specialization<T, soa::RowViewBase>::value) {
+      return arg.globalIndex();
+    } else {
+      static_assert(!framework::has_type_v<T, framework::pack<PC...>>, "Argument type mismatch");
+      return arg;
+    }
+  }
 };
 
 /// This helper class allow you to declare things which will be crated by a
@@ -210,10 +224,15 @@ struct AnalysisDataProcessorBuilder {
   template <typename T, size_t At>
   static void appendSomethingWithMetadata(std::vector<InputSpec>& inputs, std::vector<ExpressionInfo>& eInfos)
   {
-    if constexpr (framework::is_specialization<T, soa::Filtered>::value || framework::is_specialization<T, soa::RowViewFiltered>::value) {
-      eInfos.push_back({At, createSchemaFromColumns(typename T::table_t::persistent_columns_t{}), nullptr});
+    using dT = std::decay_t<T>;
+    if constexpr (framework::is_specialization<dT, soa::Filtered>::value) {
+      eInfos.push_back({At, createSchemaFromColumns(typename dT::table_t::persistent_columns_t{}), nullptr});
+    } else if constexpr (soa::is_type_with_policy_v<dT>) {
+      if (std::is_same_v<typename dT::policy_t, soa::FilteredIndexPolicy>) {
+        eInfos.push_back({At, createSchemaFromColumns(typename dT::table_t::persistent_columns_t{}), nullptr});
+      }
     }
-    doAppendInputWithMetadata(soa::make_originals_from_type<T>(), inputs);
+    doAppendInputWithMetadata(soa::make_originals_from_type<dT>(), inputs);
   }
 
   template <typename R, typename C, typename... Args>
@@ -310,7 +329,7 @@ struct AnalysisDataProcessorBuilder {
   }
 
   template <typename Task, typename R, typename C, typename Grouping, typename... Associated>
-  static void invokeProcess(Task& task, InputRecord& inputs, R (C::*)(Grouping, Associated...), std::vector<ExpressionInfo> const infos)
+  static void invokeProcess(Task& task, InputRecord& inputs, R (C::*)(Grouping, Associated...), std::vector<ExpressionInfo> const& infos)
   {
     auto groupingTable = AnalysisDataProcessorBuilder::bindGroupingTable(inputs, &C::process, infos);
     auto associatedTables = AnalysisDataProcessorBuilder::bindAssociatedTables(inputs, &C::process, infos);
@@ -398,10 +417,50 @@ struct AnalysisDataProcessorBuilder {
               ++const_cast<std::decay_t<Grouping>&>(groupingElement);
               ++oi;
             }
-          }
-          if constexpr (is_specialization<std::decay_t<AssociatedType>, o2::soa::Filtered>::value) {
-            // FIXME: we need to implement the case for the grouped filtered case.
-            static_assert(always_static_assert_v<std::decay_t<AssociatedType>>, "Grouping Filtered is not yet supported");
+          } else if constexpr (is_specialization<std::decay_t<AssociatedType>, o2::soa::Filtered>::value) {
+            auto& fullFiltered = std::get<0>(associatedTables);
+            auto selectionBuffer = std::shared_ptr<arrow::Buffer>(&(fullFiltered.getSelection()->GetBuffer()));
+            auto selectionArray = fullFiltered.getSelection()->ToArray();
+            offsets.push_back(fullFiltered.tableSize());
+            uint64_t selectionIndex = 0;
+            uint64_t sliceStart = 0;
+            uint64_t sliceStop = 0;
+
+            auto findSliceBounds = [&](int64_t l, int64_t h) {
+              size_t s = 0;
+              for (auto i = selectionIndex; i < selectionArray->length(); ++i) {
+                auto value = selectionArray->data()->template GetValues<uint64_t>(i);
+                if (*value == l) {
+                  sliceStart = i;
+                  s = i;
+                  break;
+                }
+              }
+              for (auto i = s + 1; i < selectionArray->length(); ++i) {
+                auto value = selectionArray->data()->template GetValues<uint64_t>(i);
+                if (*value == h) {
+                  sliceStop = i;
+                  selectionIndex = i;
+                  break;
+                }
+              }
+            };
+
+            for (auto& groupedDatum : groupsCollection) {
+              auto groupedElementsTable = arrow::util::get<std::shared_ptr<arrow::Table>>(groupedDatum.value);
+              // for each grouping element we need to slice the selection vector
+              findSliceBounds(offsets[oi], offsets[oi + 1]);
+              auto slicedBuffer = arrow::SliceBuffer(selectionBuffer, sliceStart, sliceStop - sliceStart + 1);
+              expressions::Selection slicedSelection;
+              if (!gandiva::SelectionVector::MakeInt64(sliceStop - sliceStart + 1, slicedBuffer, &slicedSelection).ok()) {
+                throw std::runtime_error("Cannot create sliced selection");
+              }
+              std::decay_t<AssociatedType> typedTable{{groupedElementsTable}, slicedSelection, offsets[oi]};
+              typedTable.bindExternalIndices(&groupingTable);
+              task.process(groupingElement, typedTable);
+              ++const_cast<std::decay_t<Grouping>&>(groupingElement);
+              ++oi;
+            }
           } else if constexpr (is_specialization<std::decay_t<AssociatedType>, o2::soa::Join>::value || is_specialization<std::decay_t<AssociatedType>, o2::soa::Concat>::value) {
             for (auto& groupedDatum : groupsCollection) {
               auto groupedElementsTable = arrow::util::get<std::shared_ptr<arrow::Table>>(groupedDatum.value);

@@ -11,6 +11,8 @@
 #ifndef O2_FRAMEWORK_ASOA_H_
 #define O2_FRAMEWORK_ASOA_H_
 
+#include "Framework/Pack.h"
+#include "Framework/CheckTypes.h"
 #include "Framework/FunctionalHelpers.h"
 #include "Framework/CompilerBuiltins.h"
 #include "Framework/Traits.h"
@@ -842,7 +844,8 @@ class Table
   }
   std::shared_ptr<arrow::Table> mTable;
   /// This is a cached lookup of the column index in a given
-  std::tuple<std::pair<C*, arrow::Column*>...> mColumnIndex;
+  std::tuple<std::pair<C*, arrow::Column*>...>
+    mColumnIndex;
   /// Cached begin iterator for this table.
   unfiltered_iterator mBegin;
   /// Cached end iterator for this table.
@@ -1108,12 +1111,13 @@ struct Join : JoinBase<Ts...> {
   {
   }
 
+  using base = JoinBase<Ts...>;
   using originals = framework::concatenated_pack_t<originals_pack_t<Ts>...>;
 
   template <typename... TA>
   void bindExternalIndices(TA*... externals)
   {
-    this->bindExternalIndices(externals...);
+    base::bindExternalIndices(externals...);
   }
 
   using table_t = JoinBase<Ts...>;
@@ -1126,12 +1130,13 @@ struct Concat : ConcatBase<T1, T2> {
   Concat(std::vector<std::shared_ptr<arrow::Table>> tables, uint64_t offset = 0)
     : ConcatBase<T1, T2>{ArrowHelpers::concatTables(std::move(tables)), offset} {}
 
+  using base = ConcatBase<T1, T2>;
   using originals = framework::concatenated_pack_t<originals_pack_t<T1>, originals_pack_t<T2>>;
 
   template <typename... TA>
   void bindExternalIndices(TA*... externals)
   {
-    this->bindExternalIndices(externals...);
+    base::bindExternalIndices(externals...);
   }
 
   // FIXME: can be remove when we do the same treatment we did for Join to Concatenate
@@ -1190,6 +1195,11 @@ class Filtered : public T
   int64_t size() const
   {
     return mSelection->GetNumSlots();
+  }
+
+  int64_t tableSize() const
+  {
+    return table_t::asArrowTable()->num_rows();
   }
 
   framework::expressions::Selection getSelection() const
