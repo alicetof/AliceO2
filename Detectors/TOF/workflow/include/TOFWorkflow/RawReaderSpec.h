@@ -8,19 +8,19 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// @file   CompressorTask.h
-/// @author Roberto Preghenella
-/// @since  2019-12-18
-/// @brief  TOF raw data compressor task
+/// @file   RawReaderSpec.h
 
-#ifndef O2_TOF_COMPRESSORTASK
-#define O2_TOF_COMPRESSORTASK
+#ifndef O2_TOF_RAWREADER
+#define O2_TOF_RAWREADER
 
-#include "Framework/Task.h"
+#include "TFile.h"
+
 #include "Framework/DataProcessorSpec.h"
-#include "TOFCompression/Compressor.h"
-#include "TOFCompression/RawDataFrame.h"
-#include <fstream>
+#include "Framework/Task.h"
+#include "TOFReconstruction/Decoder.h"
+#include "TOFBase/Digit.h"
+#include "SimulationDataFormat/MCCompLabel.h"
+#include "SimulationDataFormat/MCTruthContainer.h"
 
 using namespace o2::framework;
 
@@ -29,23 +29,25 @@ namespace o2
 namespace tof
 {
 
-class CompressorTask : public Task
+class RawReader : public Task
 {
  public:
-  CompressorTask() = default;
-  ~CompressorTask() override = default;
+  RawReader() = default;
+  ~RawReader() override = default;
   void init(InitContext& ic) final;
   void run(ProcessingContext& pc) final;
 
-  static DataProcessorSpec getSpec();
-
  private:
-  Compressor mCompressor;
-  int mTicks = 0;
-  RawDataFrame mDataFrame;
+  int mState = 0;
+  std::string mFilename;
+  std::vector<std::vector<o2::tof::Digit>> mDigits;
 };
+
+/// create a processor spec
+/// read simulated TOF raws from a root file
+framework::DataProcessorSpec getRawReaderSpec();
 
 } // namespace tof
 } // namespace o2
 
-#endif /** O2_TOF_COMPRESSORTASK **/
+#endif /* O2_TOF_RAWREADER */

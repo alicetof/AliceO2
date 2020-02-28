@@ -35,9 +35,7 @@ class Digitizer : public WindowFiller
 
   void init();
 
-  void newTF();
-
-  int process(const std::vector<HitType>* hits, std::vector<Digit>* digits);
+  void process(const std::vector<HitType>* hits, std::vector<Digit>* digits);
 
   void setCalibApi(CalibApi* calibApi) { mCalibApi = calibApi; }
 

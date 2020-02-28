@@ -18,7 +18,6 @@
 
 #include "Framework/Task.h"
 #include "Framework/DataProcessorSpec.h"
-#include "TOFReconstruction/DecoderBase.h"
 #include <fstream>
 
 class TFile;
@@ -32,9 +31,7 @@ namespace o2
 namespace tof
 {
 
-using namespace compressed;
-
-class CompressedInspectorTask : public DecoderBase, public Task
+class CompressedInspectorTask : public Task
 {
  public:
   CompressedInspectorTask() = default;
@@ -42,16 +39,9 @@ class CompressedInspectorTask : public DecoderBase, public Task
   void init(InitContext& ic) final;
   void run(ProcessingContext& pc) final;
 
+  static DataProcessorSpec getSpec();
+
  private:
-  /** decoding handlers **/
-  void headerHandler(const CrateHeader_t* crateHeader, const CrateOrbit_t* crateOrbit) override;
-
-  void frameHandler(const CrateHeader_t* crateHeader, const CrateOrbit_t* crateOrbit,
-                    const FrameHeader_t* frameHeader, const PackedHit_t* packedHits) override;
-
-  void trailerHandler(const CrateHeader_t* crateHeader, const CrateOrbit_t* crateOrbit,
-                      const CrateTrailer_t* crateTrailer, const Diagnostic_t* diagnostics) override;
-
   bool mStatus = false;
   TFile* mFile = nullptr;
   std::map<std::string, TH1*> mHistos1D;

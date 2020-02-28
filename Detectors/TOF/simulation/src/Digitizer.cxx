@@ -82,12 +82,10 @@ void Digitizer::init()
 
 //______________________________________________________________________
 
-int Digitizer::process(const std::vector<HitType>* hits, std::vector<Digit>* digits)
+void Digitizer::process(const std::vector<HitType>* hits, std::vector<Digit>* digits)
 {
   // hits array of TOF hits for a given simulated event
   // digits passed from external to be filled, in continuous readout mode we will push it on mDigitsPerTimeFrame vector of vectors of digits
-
-  //  printf("process event time = %f with %ld hits\n",mEventTime,hits->size());
 
   Int_t readoutwindow = Int_t((mEventTime - Geo::BC_TIME * (Geo::OVERLAP_IN_BC + 2)) * Geo::READOUTWINDOW_INV); // event time shifted by 2 BC as safe margin before to change current readout window to account for decalibration
 
@@ -100,9 +98,6 @@ int Digitizer::process(const std::vector<HitType>* hits, std::vector<Digit>* dig
     } // close loop readout window
   }   // close if continuous
 
-  // if (mReadoutWindowCurrent >= 256 * Geo::NWINDOW_IN_ORBIT) // new TF
-  //   return 1;
-
   for (auto& hit : *hits) {
     //TODO: put readout window counting/selection
 
@@ -113,8 +108,6 @@ int Digitizer::process(const std::vector<HitType>* hits, std::vector<Digit>* dig
     digits->clear();
     fillOutputContainer(*digits);
   }
-
-  return 0;
 }
 
 //______________________________________________________________________
@@ -313,7 +306,7 @@ void Digitizer::addDigit(Int_t channel, UInt_t istrip, Double_t time, Float_t x,
 
     if (isnext < 0) {
       LOG(ERROR) << "error: isnext =" << isnext << "(current window = " << mReadoutWindowCurrent << ")"
-                 << " nbc = " << nbc << " -- event time = " << mEventTime << " -- TF = " << mTF << "\n";
+                 << "\n";
 
       return;
     }
@@ -342,7 +335,7 @@ void Digitizer::addDigit(Int_t channel, UInt_t istrip, Double_t time, Float_t x,
       iscurrent = false;
   }
 
-  //printf("add TOF digit c=%i n=%i\n",iscurrent,isnext);
+  //  printf("add TOF digit c=%i n=%i\n",iscurrent,isnext);
 
   std::vector<Strip>* strips;
   o2::dataformats::MCTruthContainer<o2::tof::MCLabel>* mcTruthContainer;
@@ -497,16 +490,7 @@ Float_t Digitizer::getEffZ(Float_t z)
 
 //______________________________________________________________________
 Float_t Digitizer::getFractionOfCharge(Float_t x, Float_t z) { return 1; }
-//______________________________________________________________________
-void Digitizer::newTF()
-{
-  reset();
 
-  mMCTruthOutputContainerPerTimeFrame.clear();
-
-  mTF++;
-  printf("New TF = %d\n", mTF);
-}
 //______________________________________________________________________
 void Digitizer::initParameters()
 {
@@ -799,12 +783,10 @@ void Digitizer::fillOutputContainer(std::vector<Digit>& digits)
   // filling the digit container doing a loop on all strips
   for (auto& strip : *mStripsCurrent) {
     strip.fillOutputContainer(digits);
-    if (strip.getNumberOfDigits())
-      printf("strip size = %d - digit size = %d\n", strip.getNumberOfDigits(), digits.size());
   }
 
   if (mContinuous) {
-    //printf("%i) # TOF digits = %lu (%p)\n", mIcurrentReadoutWindow, digits.size(), mStripsCurrent);
+    //    printf("%i) # TOF digits = %lu (%p)\n", mIcurrentReadoutWindow, digits.size(), mStripsCurrent);
     int first = mDigitsPerTimeFrame.size();
     int ne = digits.size();
     ReadoutWindowData info(first, ne);
