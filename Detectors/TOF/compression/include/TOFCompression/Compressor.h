@@ -33,7 +33,7 @@ class Compressor
 
  public:
   Compressor() = default;
-  ~Compressor() = default;
+  ~Compressor();
 
   inline bool run()
   {
@@ -43,11 +43,16 @@ class Compressor
     return false;
   };
 
+  bool init();
+  bool open(const std::string inFileName, const std::string outFileName);
+  bool close();
+  inline bool read() { return decoderRead(); };
   inline void rewind()
   {
     decoderRewind();
     encoderRewind();
   };
+  inline bool write() { return encoderWrite(); };
 
   void checkSummary();
   void resetCounters();
@@ -56,12 +61,12 @@ class Compressor
   void setEncoderVerbose(bool val) { mEncoderVerbose = val; };
   void setCheckerVerbose(bool val) { mCheckerVerbose = val; };
 
-  void setDecoderBuffer(const char* val) { mDecoderBuffer = val; };
+  void setDecoderBuffer(char* val) { mDecoderBuffer = val; };
   void setEncoderBuffer(char* val) { mEncoderBuffer = val; };
   void setDecoderBufferSize(long val) { mDecoderBufferSize = val; };
   void setEncoderBufferSize(long val) { mEncoderBufferSize = val; };
 
-  inline uint32_t getDecoderByteCounter() const { return reinterpret_cast<const char*>(mDecoderPointer) - mDecoderBuffer; };
+  inline uint32_t getDecoderByteCounter() const { return reinterpret_cast<char*>(mDecoderPointer) - mDecoderBuffer; };
   inline uint32_t getEncoderByteCounter() const { return reinterpret_cast<char*>(mEncoderPointer) - mEncoderBuffer; };
 
   // benchmarks
@@ -74,8 +79,12 @@ class Compressor
 
   /** decoder private functions and data members **/
 
+  bool decoderInit();
+  bool decoderOpen(const std::string name);
+  bool decoderRead();
+  bool decoderClose();
   bool decoderParanoid();
-  inline void decoderRewind() { mDecoderPointer = reinterpret_cast<const uint32_t*>(mDecoderBuffer); };
+  inline void decoderRewind() { mDecoderPointer = reinterpret_cast<uint32_t*>(mDecoderBuffer); };
   inline void decoderNext()
   {
     mDecoderPointer += mDecoderNextWord;
@@ -87,13 +96,15 @@ class Compressor
   int mJumpRDH = 0;
 
   std::ifstream mDecoderFile;
-  const char* mDecoderBuffer = nullptr;
-  long mDecoderBufferSize;
-  const uint32_t* mDecoderPointer = nullptr;
-  const uint32_t* mDecoderPointerMax = nullptr;
-  const uint32_t* mDecoderPointerNext = nullptr;
+  char* mDecoderBuffer = nullptr;
+  bool mOwnDecoderBuffer = false;
+  long mDecoderBufferSize = 8192;
+  //  long mDecoderBufferSize = 1048576;
+  uint32_t* mDecoderPointer = nullptr;
+  uint32_t* mDecoderPointerMax = nullptr;
+  uint32_t* mDecoderPointerNext = nullptr;
   uint8_t mDecoderNextWord = 1;
-  const o2::header::RAWDataHeader* mDecoderRDH;
+  o2::header::RAWDataHeader* mDecoderRDH;
   bool mDecoderVerbose = false;
   bool mDecoderError = false;
   bool mDecoderFatal = false;
@@ -103,13 +114,18 @@ class Compressor
 
   /** encoder private functions and data members **/
 
+  bool encoderInit();
+  bool encoderOpen(const std::string name);
+  bool encoderWrite();
+  bool encoderClose();
   void encoderSpider(int itrm);
   inline void encoderRewind() { mEncoderPointer = reinterpret_cast<uint32_t*>(mEncoderBuffer); };
   inline void encoderNext() { mEncoderPointer++; };
 
   std::ofstream mEncoderFile;
   char* mEncoderBuffer = nullptr;
-  long mEncoderBufferSize;
+  bool mOwnEncoderBuffer = false;
+  long mEncoderBufferSize = 1048576;
   uint32_t* mEncoderPointer = nullptr;
   uint32_t* mEncoderPointerMax = nullptr;
   uint32_t* mEncoderPointerStart = nullptr;

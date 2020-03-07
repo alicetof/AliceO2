@@ -8,17 +8,16 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
-/// @file   CompressorTask.h
+/// @file   RawReaderTask.h
 /// @author Roberto Preghenella
 /// @since  2019-12-18
-/// @brief  TOF raw data compressor task
+/// @brief  TOF raw reader task
 
-#ifndef O2_TOF_COMPRESSORTASK
-#define O2_TOF_COMPRESSORTASK
+#ifndef O2_TOF_RAWREADERTASK
+#define O2_TOF_RAWREADERTASK
 
 #include "Framework/Task.h"
 #include "Framework/DataProcessorSpec.h"
-#include "TOFCompression/Compressor.h"
 #include "TOFCompression/RawDataFrame.h"
 #include <fstream>
 
@@ -29,23 +28,23 @@ namespace o2
 namespace tof
 {
 
-class CompressorTask : public Task
+class RawReaderTask : public Task
 {
  public:
-  CompressorTask() = default;
-  ~CompressorTask() override = default;
+  RawReaderTask() = default;
+  ~RawReaderTask() override = default;
   void init(InitContext& ic) final;
   void run(ProcessingContext& pc) final;
 
   static DataProcessorSpec getSpec();
 
  private:
-  Compressor mCompressor;
-  int mTicks = 0;
-  RawDataFrame mDataFrame;
+  bool mStatus = false;
+  std::ifstream mFile;
+  std::string mBuffer;
 };
 
 } // namespace tof
 } // namespace o2
 
-#endif /** O2_TOF_COMPRESSORTASK **/
+#endif /* O2_TOF_RAWREADERTASK */
