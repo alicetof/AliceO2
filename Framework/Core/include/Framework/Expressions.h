@@ -19,6 +19,7 @@
 #include "Framework/InitContext.h"
 #include "Framework/ConfigParamRegistry.h"
 #include "Framework/RootConfigParamHelpers.h"
+#include "Framework/RuntimeError.h"
 #include <arrow/type_fwd.h>
 #include <gandiva/gandiva_aliases.h>
 #include <arrow/type.h>
@@ -29,7 +30,6 @@
 #include <gandiva/node.h>
 #include <gandiva/filter.h>
 #include <gandiva/projector.h>
-#include <fmt/format.h>
 #else
 namespace gandiva
 {
@@ -56,7 +56,7 @@ struct LiteralStorage {
   using stored_pack = framework::pack<T...>;
 };
 
-using LiteralValue = LiteralStorage<int, bool, float, double, uint8_t>;
+using LiteralValue = LiteralStorage<int, bool, float, double, uint8_t, int64_t>;
 
 template <typename T>
 constexpr auto selectArrowType()
@@ -73,6 +73,8 @@ constexpr auto selectArrowType()
     return atype::INT8;
   } else if constexpr (std::is_same_v<T, uint16_t>) {
     return atype::INT16;
+  } else if constexpr (std::is_same_v<T, int64_t>) {
+    return atype::INT64;
   } else if constexpr (std::is_same_v<T, uint8_t>) {
     return atype::UINT8;
   } else {
@@ -573,7 +575,7 @@ std::shared_ptr<gandiva::Projector> createProjectors(framework::pack<C...>, gand
   if (s.ok()) {
     return projector;
   } else {
-    throw std::runtime_error(fmt::format("Failed to create projector: {}", s.ToString()));
+    throw o2::framework::runtime_error_f("Failed to create projector: %s", s.ToString().c_str());
   }
 }
 } // namespace o2::framework::expressions

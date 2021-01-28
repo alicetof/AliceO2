@@ -35,7 +35,16 @@ o2::framework::DataProcessorSpec getFDDDigitWriterSpec(bool mctruth = true)
 
   // the callback to be set as hook for custom action when the writer is closed
   auto finishWriting = [](TFile* outputfile, TTree* outputtree) {
-    outputtree->SetEntries(1);
+    const auto* brArr = outputtree->GetListOfBranches();
+    int64_t nent = 0;
+    for (const auto* brc : *brArr) {
+      int64_t n = ((const TBranch*)brc)->GetEntries();
+      if (nent && (nent != n)) {
+        LOG(ERROR) << "Branches have different number of entries";
+      }
+      nent = n;
+    }
+    outputtree->SetEntries(nent);
     outputtree->Write();
     outputfile->Close();
   };
@@ -47,7 +56,8 @@ o2::framework::DataProcessorSpec getFDDDigitWriterSpec(bool mctruth = true)
     // make the actual output object by adopting/casting the buffer
     // into a split format
     o2::dataformats::IOMCTruthContainerView outputcontainer(labeldata);
-    auto br = framework::RootTreeWriter::remapBranch(branch, &outputcontainer);
+    auto ptr = &outputcontainer;
+    auto br = framework::RootTreeWriter::remapBranch(branch, &ptr);
     br->Fill();
     br->ResetAddress();
   };
@@ -65,6 +75,7 @@ o2::framework::DataProcessorSpec getFDDDigitWriterSpec(bool mctruth = true)
                                 MakeRootTreeWriterSpec::CustomClose(finishWriting),
                                 BranchDefinition<std::vector<o2::fdd::Digit>>{InputSpec{"digitBCinput", "FDD", "DIGITSBC"}, "FDDDigit"},
                                 BranchDefinition<std::vector<o2::fdd::ChannelData>>{InputSpec{"digitChinput", "FDD", "DIGITSCH"}, "FDDDigitCh"},
+                                BranchDefinition<std::vector<o2::fdd::DetTrigInput>>{InputSpec{"digitTrinput", "FDD", "TRIGGERINPUT"}, "TRIGGERINPUT"},
                                 std::move(labelsdef))();
 }
 

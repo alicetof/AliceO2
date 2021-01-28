@@ -9,6 +9,7 @@
 // or submit itself to any jurisdiction.
 
 #include "Framework/DeviceMetricsInfo.h"
+#include "Framework/RuntimeError.h"
 #include <cassert>
 #include <cinttypes>
 #include <cstdlib>
@@ -19,9 +20,7 @@
 #include <tuple>
 #include <iostream>
 
-namespace o2
-{
-namespace framework
+namespace o2::framework
 {
 
 // Parses a metric in the form
@@ -180,6 +179,7 @@ bool DeviceMetricsHelper::processMetric(ParsedMetricMatch& match,
     info.min.push_back(std::numeric_limits<float>::max());
     info.maxDomain.push_back(std::numeric_limits<size_t>::lowest());
     info.minDomain.push_back(std::numeric_limits<size_t>::max());
+    info.changed.push_back(false);
 
     // Add the index by name in the correct position
     // this will require moving the tail of the index,
@@ -189,6 +189,7 @@ bool DeviceMetricsHelper::processMetric(ParsedMetricMatch& match,
     auto lastChar = std::min(match.endKey - match.beginKey, (ptrdiff_t)MetricLabelIndex::MAX_METRIC_LABEL_SIZE - 1);
     memcpy(metricLabelIdx.label, match.beginKey, lastChar);
     metricLabelIdx.label[lastChar] = '\0';
+    metricLabelIdx.size = lastChar;
     metricLabelIdx.index = info.metrics.size();
     info.metricLabelsIdx.insert(mi, metricLabelIdx);
     // Add the the actual Metric info to the store
@@ -256,18 +257,19 @@ bool DeviceMetricsHelper::processMetric(ParsedMetricMatch& match,
       return false;
       break;
   };
-
+  // Note that we updated a given metric.
+  info.changed[metricIndex] = true;
   return true;
 }
 
-/// @return the index in metrics for the information of given metric
-size_t
-  DeviceMetricsHelper::metricIdxByName(const std::string& name, const DeviceMetricsInfo& info)
+size_t DeviceMetricsHelper::metricIdxByName(const std::string& name, const DeviceMetricsInfo& info)
 {
   size_t i = 0;
   while (i < info.metricLabelsIdx.size()) {
     auto& metricName = info.metricLabelsIdx[i];
-    if (metricName.label == name) {
+    // We check the size first and then the last character because that's
+    // likely to be different for multi-index metrics
+    if (metricName.size == name.size() && metricName.label[metricName.size - 1] == name[metricName.size - 1] && memcmp(metricName.label, name.c_str(), metricName.size) == 0) {
       return metricName.index;
     }
     ++i;
@@ -296,5 +298,4 @@ std::ostream& operator<<(std::ostream& oss, MetricType const& val)
   return oss;
 }
 
-} // namespace framework
-} // namespace o2
+} // namespace o2::framework

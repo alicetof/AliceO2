@@ -13,7 +13,8 @@
 /Algorithm  @matthiasrichter
 
 /Analysis   @jgrosseo @iarsene
-/Analysis/Tasks/hf*  @ginnocen
+/Analysis/Tasks/ALICE3  @ginnocen
+/Analysis/Tasks/PWGHF  @ginnocen
 
 /CCDB  @costing @Barthelemy @sawenzel @AliceO2Group/framework-admins
 
@@ -40,7 +41,7 @@
 /DataFormats/Detectors/Passive                 @sawenzel
 /DataFormats/Detectors/TOF                     @noferini 
 /DataFormats/Detectors/TPC                     @davidrohr @wiechula @shahor02
-/DataFormats/Detectors/TRD                     @jolopezl @bazinski @tdietel
+/DataFormats/Detectors/TRD                     @jolopezl @bazinski @tdietel @martenole
 /DataFormats/Detectors/Upgrades                @qgp @marcovanleeuwen
 /DataFormats/Detectors/ZDC                     @coppedis
 
@@ -67,7 +68,7 @@
 /Detectors/Passive                 @sawenzel
 /Detectors/TOF                     @noferini 
 /Detectors/TPC                     @davidrohr @wiechula @shahor02
-/Detectors/TRD                     @jolopezl @bazinski @tdietel
+/Detectors/TRD                     @jolopezl @bazinski @tdietel @martenole
 /Detectors/Upgrades                @qgp @marcovanleeuwen
 /Detectors/ZDC                     @coppedis
 
@@ -114,10 +115,10 @@
 
 /Utilities  @AliceO2Group/framework-admins
 /Utilities/Mergers @Barthelemy @knopers8
+/Utilities/DataSampling @Barthelemy @knopers8
 #/Utilities/DataCompression
 #/Utilities/DataFlow
 #/Utilities/MCStepLogger
-#/Utilities/Mergers
 #/Utilities/O2Device
 #/Utilities/O2MessageMonitor
 #/Utilities/PCG

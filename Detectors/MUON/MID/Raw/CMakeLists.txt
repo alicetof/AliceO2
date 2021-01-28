@@ -14,12 +14,12 @@ o2_add_library(
           src/CrateMapper.cxx
           src/CrateMasks.cxx
           src/Decoder.cxx
+          src/ElectronicsDelay.cxx
           src/ELinkDecoder.cxx
           src/Encoder.cxx
           src/FEEIdConfig.cxx
-          src/GBTBareDecoder.cxx
+          src/GBTDecoder.cxx
           src/GBTOutputHandler.cxx
-          src/GBTUserLogicDecoder.cxx
           src/GBTUserLogicEncoder.cxx
           src/LocalBoardRO.cxx
           src/DecodedDataAggregator.cxx

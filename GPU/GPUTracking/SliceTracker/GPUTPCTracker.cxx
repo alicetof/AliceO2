@@ -106,7 +106,7 @@ void* GPUTPCTracker::SetPointersCommon(void* mem)
 void GPUTPCTracker::RegisterMemoryAllocation()
 {
   AllocateAndInitializeLate();
-  bool reuseCondition = !mRec->GetProcessingSettings().keepDisplayMemory && mRec->GetProcessingSettings().trackletSelectorInPipeline && ((mRec->GetRecoStepsGPU() & GPUDataTypes::RecoStep::TPCSliceTracking) || mRec->GetProcessingSettings().ompThreads == 1);
+  bool reuseCondition = !mRec->GetProcessingSettings().keepDisplayMemory && mRec->GetProcessingSettings().trackletSelectorInPipeline && ((mRec->GetRecoStepsGPU() & GPUDataTypes::RecoStep::TPCSliceTracking) || mRec->GetProcessingSettings().ompKernels == 1 || mRec->GetProcessingSettings().ompThreads == 1);
   GPUMemoryReuse reLinks{reuseCondition, GPUMemoryReuse::REUSE_1TO1, GPUMemoryReuse::TrackerDataLinks, (unsigned short)(mISlice % mRec->GetProcessingSettings().nStreams)};
   mMemoryResLinks = mRec->RegisterMemoryAllocation(this, &GPUTPCTracker::SetPointersDataLinks, GPUMemoryResource::MEMORY_SCRATCH | GPUMemoryResource::MEMORY_STACK, "TPCSliceLinks", reLinks);
   mMemoryResSliceScratch = mRec->RegisterMemoryAllocation(this, &GPUTPCTracker::SetPointersDataScratch, GPUMemoryResource::MEMORY_SCRATCH | GPUMemoryResource::MEMORY_STACK | GPUMemoryResource::MEMORY_CUSTOM, "TPCSliceScratch");
@@ -177,9 +177,11 @@ GPUh() int GPUTPCTracker::CheckEmptySlice()
   // Check if the Slice is empty, if so set the output apropriate and tell the reconstuct procesdure to terminate
   if (NHitsTotal() < 1) {
     mCommonMem->nTracks = mCommonMem->nTrackHits = 0;
-    WriteOutputPrepare();
-    mOutput->SetNTracks(0);
-    mOutput->SetNTrackClusters(0);
+    if (mOutput) {
+      WriteOutputPrepare();
+      mOutput->SetNTracks(0);
+      mOutput->SetNTrackClusters(0);
+    }
     return 1;
   }
   return 0;
@@ -253,7 +255,7 @@ GPUh() void GPUTPCTracker::WriteOutput()
       unsigned char flags;
       unsigned short amp;
       int id;
-      if (Param().earlyTpcTransform) {
+      if (Param().par.earlyTpcTransform) {
         origX = mData.ClusterData()[clusterIndex].x;
         origY = mData.ClusterData()[clusterIndex].y;
         origZ = mData.ClusterData()[clusterIndex].z;
@@ -290,7 +292,7 @@ GPUh() void GPUTPCTracker::WriteOutput()
   mOutput->SetNTracks(nStoredTracks);
   mOutput->SetNLocalTracks(nStoredLocalTracks);
   mOutput->SetNTrackClusters(nStoredHits);
-  if (Param().debugLevel >= 3) {
+  if (Param().par.debugLevel >= 3) {
     GPUInfo("Slice %d, Output: Tracks %d, local tracks %d, hits %d", mISlice, nStoredTracks, nStoredLocalTracks, nStoredHits);
   }
 }

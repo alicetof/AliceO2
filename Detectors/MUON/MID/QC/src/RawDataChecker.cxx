@@ -27,6 +27,7 @@ void RawDataChecker::init(const CrateMasks& crateMasks)
 {
   /// Initializes the checkers
   for (uint16_t igbt = 0; igbt < crateparams::sNGBTs; ++igbt) {
+    mCheckers[igbt].setElectronicsDelay(mElectronicsDelay);
     mCheckers[igbt].init(igbt, crateMasks.getMask(igbt));
   }
 }
@@ -52,6 +53,14 @@ bool RawDataChecker::process(gsl::span<const LocalBoardRO> localBoards, gsl::spa
   }
 
   return isOk;
+}
+
+void RawDataChecker::setSyncTrigger(uint32_t syncTrigger)
+{
+  /// Sets the trigger use to verify if all data of an event where received
+  for (auto& checker : mCheckers) {
+    checker.setSyncTrigger(syncTrigger);
+  }
 }
 
 unsigned int RawDataChecker::getNEventsProcessed() const

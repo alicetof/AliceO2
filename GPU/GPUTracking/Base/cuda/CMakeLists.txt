@@ -20,15 +20,21 @@ set(HDRS GPUReconstructionCUDA.h GPUReconstructionCUDAInternals.h GPUReconstruct
 
 # -------------------------------- Prepare RTC -------------------------------------------------------
 if(NOT ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
-  set(CURTC_DEFINES "-D$<JOIN:$<TARGET_PROPERTY:O2::GPUTracking,COMPILE_DEFINITIONS>,$<SEMICOLON>-D>"
-                    -DGPUCA_GPUCODE_GENRTC -DGPUCA_GPULIBRARY=CUDA
+  enable_language(ASM)
+  if(ALIGPU_BUILD_TYPE STREQUAL "O2")
+    set(defineIncludeSrc "O2::${MODULE}")
+  else()
+    set(defineIncludeSrc "${MODULE}")
+  endif()
+  set(CURTC_DEFINES "-D$<JOIN:$<TARGET_PROPERTY:${defineIncludeSrc},COMPILE_DEFINITIONS>,$<SEMICOLON>-D>"
+                    -DGPUCA_GPUCODE_GENRTC
   )
-  set(CURTC_INCLUDES "-I$<JOIN:$<TARGET_PROPERTY:O2::GPUTracking,INCLUDE_DIRECTORIES>,$<SEMICOLON>-I>"
+  set(CURTC_INCLUDES "-I$<JOIN:$<FILTER:$<TARGET_PROPERTY:${defineIncludeSrc},INCLUDE_DIRECTORIES>,EXCLUDE,^/usr/include/?>,$<SEMICOLON>-I>"
                     -I${CMAKE_SOURCE_DIR}/Detectors/Base/src
                     -I${CMAKE_SOURCE_DIR}/Detectors/TRD/base/src
   )
   if(ALIGPU_BUILD_TYPE STREQUAL "O2")
-    set(CURTC_INCLUDES ${CURTC_INCLUDES} "-I$<JOIN:$<TARGET_PROPERTY:O2::ITStrackingCUDA,INCLUDE_DIRECTORIES>,$<SEMICOLON>-I>")
+    set(CURTC_INCLUDES ${CURTC_INCLUDES} "-I$<JOIN:$<FILTER:$<TARGET_PROPERTY:O2::ITStrackingCUDA,INCLUDE_DIRECTORIES>,EXCLUDE,^/usr/include/?>,$<SEMICOLON>-I>")
   endif()
   #set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -keep")
 
@@ -62,8 +68,8 @@ if(NOT ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
   
   add_custom_command(
       OUTPUT ${CURTC_BIN}.src.S
-      COMMAND cat ${GPUDIR}/Standalone/makefiles/include.S | sed "s/FILENAMEMOD/_curtc_GPUReconstructionCUDArtc_cu_src/g" | sed "s,FILENAMENORMAL,${CURTC_BIN}.src,g" > ${CURTC_BIN}.src.S
-      MAIN_DEPENDENCY ${GPUDIR}/Standalone/makefiles/include.S
+      COMMAND cat ${GPUDIR}/utils/include.S | sed "s/FILENAMEMOD/_curtc_GPUReconstructionCUDArtc_cu_src/g" | sed "s,FILENAMENORMAL,${CURTC_BIN}.src,g" > ${CURTC_BIN}.src.S
+      MAIN_DEPENDENCY ${GPUDIR}/utils/include.S
   )
 
   add_custom_command(
@@ -75,8 +81,8 @@ if(NOT ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
   
   add_custom_command(
       OUTPUT ${CURTC_BIN}.command.S
-      COMMAND cat ${GPUDIR}/Standalone/makefiles/include.S | sed "s/FILENAMEMOD/_curtc_GPUReconstructionCUDArtc_cu_command/g" | sed "s,FILENAMENORMAL,${CURTC_BIN}.command,g" > ${CURTC_BIN}.command.S
-      MAIN_DEPENDENCY ${GPUDIR}/Standalone/makefiles/include.S
+      COMMAND cat ${GPUDIR}/utils/include.S | sed "s/FILENAMEMOD/_curtc_GPUReconstructionCUDArtc_cu_command/g" | sed "s,FILENAMENORMAL,${CURTC_BIN}.command,g" > ${CURTC_BIN}.command.S
+      MAIN_DEPENDENCY ${GPUDIR}/utils/include.S
       DEPENDS ${CURTC_BIN}.command
   )
   # cmake-format: on
@@ -87,15 +93,15 @@ if(NOT ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
     ${CURTC_BIN}.src.S
     PROPERTIES
     LANGUAGE
-    CXX
+    ASM
     OBJECT_DEPENDS
-    "${CURTC_BIN}.src;${GPUDIR}/Standalone/makefiles/include.S")
+    "${CURTC_BIN}.src;${GPUDIR}/utils/include.S")
     
   set_source_files_properties(
     ${CURTC_BIN}.command.S
     PROPERTIES
     LANGUAGE
-    CXX
+    ASM
   )
   
   set(SRCS ${SRCS} ${CURTC_BIN}.src.S ${CURTC_BIN}.command.S)
@@ -109,12 +115,12 @@ if(ALIGPU_BUILD_TYPE STREQUAL "O2")
     PRIVATE_INCLUDE_DIRECTORIES
       ${CMAKE_SOURCE_DIR}/Detectors/Base/src
       ${CMAKE_SOURCE_DIR}/Detectors/TRD/base/src
+      ${CMAKE_SOURCE_DIR}/DataFormats/Reconstruction/src
     PUBLIC_LINK_LIBRARIES O2::GPUTracking O2::ITStrackingCUDA
     TARGETVARNAME targetName)
 
   target_compile_definitions(
-    ${targetName} PUBLIC GPUCA_GPULIBRARY=CUDA
-    $<TARGET_PROPERTY:O2::GPUTracking,COMPILE_DEFINITIONS>)
+    ${targetName} PUBLIC $<TARGET_PROPERTY:O2::GPUTracking,COMPILE_DEFINITIONS>)
 
   set_target_properties(${targetName} PROPERTIES LINKER_LANGUAGE CXX)
 
@@ -122,34 +128,32 @@ if(ALIGPU_BUILD_TYPE STREQUAL "O2")
 endif()
 
 if(ALIGPU_BUILD_TYPE STREQUAL "ALIROOT")
-  add_definitions(-DGPUCA_GPULIBRARY=CUDA)
-
+  set(targetName Ali${MODULE})
   # Generate the dictionary
   get_directory_property(incdirs INCLUDE_DIRECTORIES)
-  generate_dictionary("Ali${MODULE}" "" "GPUReconstructionCUDA.h"
+  generate_dictionary("${targetName}" "" "GPUReconstructionCUDA.h"
                       "${incdirs} .")
 
   # Generate the ROOT map Dependecies
-  generate_rootmap("Ali${MODULE}" "" "")
+  generate_rootmap("${targetName}" "" "")
 
   # Add a library to the project using the specified source files
-  add_library_tested(Ali${MODULE} SHARED ${SRCS} G__Ali${MODULE}.cxx)
+  add_library_tested(${targetName} SHARED ${SRCS} G__${targetName}.cxx)
   # CUDA run-time and driver
-  target_link_libraries(Ali${MODULE} PUBLIC AliGPUTracking)
+  target_link_libraries(${targetName} PUBLIC AliGPUTracking)
 
   # Additional compilation flags
-  set_target_properties(Ali${MODULE} PROPERTIES COMPILE_FLAGS "")
+  set_target_properties(${targetName} PROPERTIES COMPILE_FLAGS "")
 
   # Installation
-  install(TARGETS Ali${MODULE} ARCHIVE DESTINATION lib LIBRARY DESTINATION lib)
+  install(TARGETS ${targetName} ARCHIVE DESTINATION lib LIBRARY DESTINATION lib)
 
   install(FILES ${HDRS} DESTINATION include)
 
-  set(targetName Ali${MODULE})
+  
 endif()
 
 if(ALIGPU_BUILD_TYPE STREQUAL "Standalone")
-  add_definitions(-DGPUCA_GPULIBRARY=CUDA)
   add_library(${MODULE} SHARED ${SRCS})
   target_link_libraries(${MODULE} PUBLIC GPUTracking)
   set(targetName ${MODULE})
@@ -158,3 +162,11 @@ endif()
 
 # Since
 target_link_libraries(${targetName} PRIVATE cuda cudart nvrtc)
+target_compile_definitions(${targetName} PUBLIC GPUCA_GPULIBRARY=CUDA)
+if(CUDA_COMPUTETARGET AND CUDA_COMPUTETARGET STREQUAL "86")
+target_compile_definitions(${targetName} PUBLIC GPUCA_GPUTYPE_AMPERE)
+elseif(CUDA_COMPUTETARGET AND CUDA_COMPUTETARGET STREQUAL "75")
+target_compile_definitions(${targetName} PUBLIC GPUCA_GPUTYPE_TURING)
+else()
+target_compile_definitions(${targetName} PUBLIC GPUCA_GPUTYPE_AMPERE)
+endif()

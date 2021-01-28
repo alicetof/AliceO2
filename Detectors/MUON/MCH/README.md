@@ -11,5 +11,7 @@ This is a top page for the MCH detector documentation.
 \subpage refDetectorsMUONMCHClustering
 \subpage refDetectorsMUONMCHRaw
 \subpage refDetectorsMUONMCHMapping
+\subpage refDetectorsMUONMCHTracking
 \subpage refDetectorsMUONMCHWorkflow
+\subpage refDetectorsMUONMCHGeometry
 /doxy -->

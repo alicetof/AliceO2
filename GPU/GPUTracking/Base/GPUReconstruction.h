@@ -30,7 +30,6 @@
 #include "GPUMemoryResource.h"
 #include "GPUConstantMem.h"
 #include "GPUTPCSliceOutput.h"
-#include "GPUDataTypes.h"
 #include "GPULogging.h"
 
 namespace o2
@@ -47,7 +46,7 @@ namespace GPUCA_NAMESPACE
 namespace gpu
 {
 class GPUChain;
-class GPUMemorySizeScalers;
+struct GPUMemorySizeScalers;
 struct GPUReconstructionPipelineContext;
 
 class GPUReconstruction
@@ -226,7 +225,7 @@ class GPUReconstruction
   const GPUSettingsDeviceBackend& GetDeviceBackendSettings() { return mDeviceBackendSettings; }
   const GPUSettingsProcessing& GetProcessingSettings() const { return mProcessingSettings; }
   bool IsInitialized() const { return mInitialized; }
-  void SetSettings(float solenoidBz);
+  void SetSettings(float solenoidBz, const GPURecoStepConfiguration* workflow = nullptr);
   void SetSettings(const GPUSettingsEvent* settings, const GPUSettingsRec* rec = nullptr, const GPUSettingsProcessing* proc = nullptr, const GPURecoStepConfiguration* workflow = nullptr);
   void SetResetTimers(bool reset) { mProcessingSettings.resetTimers = reset; } // May update also after Init()
   void SetDebugLevelTmp(int level) { mProcessingSettings.debugLevel = level; } // Temporarily, before calling SetSettings()
@@ -236,6 +235,7 @@ class GPUReconstruction
   void SetInputControl(void* ptr, size_t size);
   GPUOutputControl& OutputControl() { return mOutputControl; }
   int GetMaxThreads() const { return mMaxThreads; }
+  int SetNOMPThreads(int n);
   int NStreams() const { return mNStreams; }
   const void* DeviceMemoryBase() const { return mDeviceMemoryBase; }
 
@@ -279,8 +279,8 @@ class GPUReconstruction
   class GPUThreadContext
   {
    public:
-    GPUThreadContext() = default;
-    virtual ~GPUThreadContext() = default;
+    GPUThreadContext();
+    virtual ~GPUThreadContext();
   };
   virtual std::unique_ptr<GPUThreadContext> GetThreadContext();
 
@@ -361,10 +361,11 @@ class GPUReconstruction
   double mStatKernelTime = 0.;
   double mStatWallTime = 0.;
 
-  int mMaxThreads = 0; // Maximum number of threads that may be running, on CPU or GPU
-  int mThreadId = -1;  // Thread ID that is valid for the local CUDA context
-  int mGPUStuck = 0;   // Marks that the GPU is stuck, skip future events
-  int mNStreams = 1;   // Number of parallel GPU streams
+  int mMaxThreads = 0;    // Maximum number of threads that may be running, on CPU or GPU
+  int mThreadId = -1;     // Thread ID that is valid for the local CUDA context
+  int mGPUStuck = 0;      // Marks that the GPU is stuck, skip future events
+  int mNStreams = 1;      // Number of parallel GPU streams
+  int mMaxOMPThreads = 0; // Maximum number of OMP threads
 
   // Management for GPUProcessors
   struct ProcessorData {
@@ -420,10 +421,11 @@ inline T* GPUReconstruction::AllocateIOMemoryHelper(size_t n, const T*& ptr, std
     return nullptr;
   }
   T* retVal;
-  if (mInputControl.OutputType == GPUOutputControl::UseExternalBuffer) {
+  if (mInputControl.useExternal()) {
     u.reset(nullptr);
-    GPUProcessor::computePointerWithAlignment(mInputControl.OutputPtr, retVal, n);
-    if ((size_t)((char*)mInputControl.OutputPtr - (char*)mInputControl.OutputBase) > mInputControl.OutputMaxSize) {
+    mInputControl.checkCurrent();
+    GPUProcessor::computePointerWithAlignment(mInputControl.ptrCurrent, retVal, n);
+    if ((size_t)((char*)mInputControl.ptrCurrent - (char*)mInputControl.ptrBase) > mInputControl.size) {
       throw std::bad_alloc();
     }
   } else {
@@ -492,9 +494,9 @@ inline void GPUReconstruction::SetupGPUProcessor(T* proc, bool allocate)
   if (allocate) {
     proc->SetMaxData(mHostConstantMem->ioPtrs);
   }
-  if (proc->mDeviceProcessor) {
-    std::memcpy((void*)proc->mDeviceProcessor, (const void*)proc, sizeof(*proc));
-    proc->mDeviceProcessor->InitGPUProcessor((GPUReconstruction*)this, GPUProcessor::PROCESSOR_TYPE_DEVICE);
+  if (proc->mGPUProcessorType != GPUProcessor::PROCESSOR_TYPE_DEVICE && proc->mLinkedProcessor) {
+    std::memcpy((void*)proc->mLinkedProcessor, (const void*)proc, sizeof(*proc));
+    proc->mLinkedProcessor->InitGPUProcessor((GPUReconstruction*)this, GPUProcessor::PROCESSOR_TYPE_DEVICE, proc);
   }
   if (allocate) {
     AllocateRegisteredMemory(proc, true);

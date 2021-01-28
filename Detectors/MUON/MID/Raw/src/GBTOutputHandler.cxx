@@ -15,26 +15,21 @@
 
 #include "MIDRaw/GBTOutputHandler.h"
 
-#include "RawInfo.h"
-
 namespace o2
 {
 namespace mid
 {
 
-void GBTOutputHandler::clear()
+void GBTOutputHandler::set(uint32_t orbit, std::vector<LocalBoardRO>& data, std::vector<ROFRecord>& rofs)
 {
-  /// Rewind bytes
-  mData.clear();
-  mROFRecords.clear();
-}
+  /// Sets the orbit and the output data vectors
+  mOrbit = orbit;
+  mData = &data;
+  mROFRecords = &rofs;
 
-void GBTOutputHandler::setIR(uint16_t bc, uint32_t orbit, int pageCnt)
-{
-  /// Sets the interaction record if needed
   if (mIRs[0].isDummy()) {
     for (auto& ir : mIRs) {
-      ir.bc = bc;
+      ir.bc = 0;
       // The reset changes depending on the way we synch with the orbit
       // (see processOrbitTrigger for details)
       // FIXME: pick one of the two
@@ -42,16 +37,6 @@ void GBTOutputHandler::setIR(uint16_t bc, uint32_t orbit, int pageCnt)
       // ir.orbit = orbit; // with reset to RDH
     }
     mLastClock.fill(constants::lhc::LHCMaxBunches);
-  }
-
-  if (pageCnt == 0) {
-    // FIXME: in the tests, the BC counter increases at each RDH
-    // However, the inner clock of the RO is not reset,
-    // so if we want to have the absolute BC,
-    // we need to store only the BC counter of the first page.
-    // Not sure how it will work on data...
-    mIRFirstPage.bc = bc;
-    mIRFirstPage.orbit = orbit;
   }
 }
 
@@ -64,7 +49,7 @@ bool GBTOutputHandler::checkLoc(size_t ilink, const ELinkDecoder& decoder)
 EventType GBTOutputHandler::processSelfTriggered(size_t ilink, uint16_t localClock, uint16_t& correctedClock)
 {
   /// Processes the self-triggered event
-  correctedClock = localClock - sDelayBCToLocal;
+  correctedClock = localClock - mElectronicsDelay.BCToLocal;
   uint16_t linkMask = 1 << ilink;
   if ((mReceivedCalibration & linkMask) && (localClock == mExpectedFETClock[ilink])) {
     // Reset the calibration flag for this e-link
@@ -77,7 +62,7 @@ EventType GBTOutputHandler::processSelfTriggered(size_t ilink, uint16_t localClo
 EventType GBTOutputHandler::processCalibrationTrigger(size_t ilink, uint16_t localClock)
 {
   /// Processes the calibration event
-  mExpectedFETClock[ilink] = localClock + sDelayCalibToFET;
+  mExpectedFETClock[ilink] = localClock + mElectronicsDelay.calibToFET;
   mReceivedCalibration |= (1 << ilink);
   return EventType::Noise;
 }
@@ -94,7 +79,7 @@ void GBTOutputHandler::processOrbitTrigger(size_t ilink, uint16_t localClock, ui
   //   (CAVEAT: synch is lost if we have lot of data, spanning over two orbits)
   // FIXME: pick one of the two
   ++mIRs[ilink].orbit; // orbit increase
-  // mIRs[ilink] = mIRFirstPage; // reset to RDH
+  // mIRs[ilink].orbit = mOrbit; // reset to RDH
   if ((triggerWord & raw::sSOX) == 0) {
     mLastClock[ilink] = localClock;
   }
@@ -140,14 +125,14 @@ bool GBTOutputHandler::processTrigger(size_t ilink, const ELinkDecoder& decoder,
 void GBTOutputHandler::addLoc(size_t ilink, const ELinkDecoder& decoder, EventType eventType, uint16_t correctedClock)
 {
   /// Adds the local board to the output data vector
-  auto firstEntry = mData.size();
-  mData.push_back({decoder.getStatusWord(), decoder.getTriggerWord(), crateparams::makeUniqueLocID(crateparams::getCrateIdFromROId(mFeeId), decoder.getId()), decoder.getInputs()});
+  auto firstEntry = mData->size();
+  mData->push_back({decoder.getStatusWord(), decoder.getTriggerWord(), crateparams::makeUniqueLocID(crateparams::getCrateIdFromROId(mFeeId), decoder.getId()), decoder.getInputs()});
   InteractionRecord intRec(mIRs[ilink].bc + correctedClock, mIRs[ilink].orbit);
-  mROFRecords.emplace_back(intRec, eventType, firstEntry, 1);
+  mROFRecords->emplace_back(intRec, eventType, firstEntry, 1);
   for (int ich = 0; ich < 4; ++ich) {
-    if ((mData.back().firedChambers & (1 << ich))) {
-      mData.back().patternsBP[ich] = decoder.getPattern(0, ich);
-      mData.back().patternsNBP[ich] = decoder.getPattern(1, ich);
+    if ((mData->back().firedChambers & (1 << ich))) {
+      mData->back().patternsBP[ich] = decoder.getPattern(0, ich);
+      mData->back().patternsNBP[ich] = decoder.getPattern(1, ich);
     }
   }
 }
@@ -173,7 +158,7 @@ void GBTOutputHandler::onDoneLocDebug(size_t ilink, const ELinkDecoder& decoder)
     // The local clock is increased when receiving an orbit trigger,
     // but the local counter returned in answering the trigger
     // belongs to the previous orbit
-    --mROFRecords.back().interactionRecord.orbit;
+    --mROFRecords->back().interactionRecord.orbit;
   }
 }
 
@@ -184,14 +169,14 @@ void GBTOutputHandler::onDoneRegDebug(size_t ilink, const ELinkDecoder& decoder)
   uint16_t correctedClock;
   processTrigger(ilink, decoder, eventType, correctedClock);
   // If we want to distinguish the two regional e-links, we can use the link ID instead
-  auto firstEntry = mData.size();
-  mData.push_back({decoder.getStatusWord(), decoder.getTriggerWord(), crateparams::makeUniqueLocID(crateparams::getCrateIdFromROId(mFeeId), ilink + 8 * (crateparams::getGBTIdInCrate(mFeeId) - 1)), decoder.getInputs()});
+  auto firstEntry = mData->size();
+  mData->push_back({decoder.getStatusWord(), decoder.getTriggerWord(), crateparams::makeUniqueLocID(crateparams::getCrateIdFromROId(mFeeId), ilink + 8 * (crateparams::getGBTIdInCrate(mFeeId) - 1)), decoder.getInputs()});
 
   auto orbit = (decoder.getTriggerWord() & raw::sORB) ? mIRs[ilink].orbit - 1 : mIRs[ilink].orbit;
 
   InteractionRecord intRec(mIRs[ilink].bc + correctedClock, orbit);
   if (decoder.getTriggerWord() == 0) {
-    if (intRec.bc < sDelayRegToLocal) {
+    if (intRec.bc < mElectronicsDelay.regToLocal) {
       // In the tests, the HB does not really correspond to a change of orbit
       // So we need to keep track of the last clock at which the HB was received
       // and come back to that value
@@ -202,9 +187,9 @@ void GBTOutputHandler::onDoneRegDebug(size_t ilink, const ELinkDecoder& decoder)
     // In this case the regional card needs to wait to receive the tracklet decision of each local
     // which result in a delay that needs to be subtracted if we want to be able to synchronize
     // local and regional cards for the checks
-    intRec -= sDelayRegToLocal;
+    intRec -= mElectronicsDelay.regToLocal;
   }
-  mROFRecords.emplace_back(intRec, eventType, firstEntry, 1);
+  mROFRecords->emplace_back(intRec, eventType, firstEntry, 1);
 }
 
 } // namespace mid

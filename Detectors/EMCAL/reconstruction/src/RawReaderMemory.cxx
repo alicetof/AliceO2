@@ -70,10 +70,12 @@ void RawReaderMemory::next()
       auto nextpagecounter = RDHDecoder::getPageCounter(nextheader);
       if (nextpagecounter == 0) {
         isDataTerminated = true;
-      } else
+      } else {
         isDataTerminated = false;
-    } else
+      }
+    } else {
       isDataTerminated = true;
+    }
     // Check if the data continues
   } while (!isDataTerminated);
   // add combined trailer to payload
@@ -82,22 +84,24 @@ void RawReaderMemory::next()
 
 void RawReaderMemory::nextPage(bool doResetPayload)
 {
-  if (!hasNext())
+  if (!hasNext()) {
     throw RawDecodingError(RawDecodingError::ErrorType_t::PAGE_NOTFOUND);
-  if (doResetPayload)
+  }
+  if (doResetPayload) {
     mRawPayload.reset();
+  }
   mRawHeaderInitialized = false;
   mPayloadInitialized = false;
   // Read header
   try {
     mRawHeader = decodeRawHeader(mRawMemoryBuffer.data() + mCurrentPosition);
-    RDHDecoder::printRDH(mRawHeader);
+    //RDHDecoder::printRDH(mRawHeader);
     if (RDHDecoder::getOffsetToNext(mRawHeader) == RDHDecoder::getHeaderSize(mRawHeader)) {
       // No Payload - jump to next rawheader
       // This will eventually move, depending on whether for events without payload in the SRU we send the RCU trailer
       mCurrentPosition += RDHDecoder::getHeaderSize(mRawHeader);
       mRawHeader = decodeRawHeader(mRawMemoryBuffer.data() + mCurrentPosition);
-      RDHDecoder::printRDH(mRawHeader);
+      //RDHDecoder::printRDH(mRawHeader);
     }
     mRawHeaderInitialized = true;
   } catch (...) {
@@ -109,18 +113,30 @@ void RawReaderMemory::nextPage(bool doResetPayload)
   } else {
     mRawBuffer.readFromMemoryBuffer(gsl::span<const char>(mRawMemoryBuffer.data() + mCurrentPosition + RDHDecoder::getHeaderSize(mRawHeader), RDHDecoder::getMemorySize(mRawHeader) - RDHDecoder::getHeaderSize(mRawHeader)));
 
-    // Read off and chop trailer
+    // Read off and chop trailer (if required)
     //
-    // Every page gets a trailer. The trailers from the single pages need to be removed.
-    // There will be a combined trailer which keeps the sum of the payloads for all trailers.
-    // This will be appended to the chopped payload.
-    auto trailer = RCUTrailer::constructFromPayloadWords(mRawBuffer.getDataWords());
-    if (!mCurrentTrailer.isInitialized()) {
-      mCurrentTrailer = trailer;
+    // In case every page gets a trailer (intermediate format). The trailers from the single
+    // pages need to be removed. There will be a combined trailer which keeps the sum of the
+    // payloads for all trailers. This will be appended to the chopped payload.
+    //
+    // Trailer only at the last page (new format): Only last page gets trailer. The trailer is
+    // also chopped from the payload as it will be added later again.
+    auto lastword = *(mRawBuffer.getDataWords().rbegin());
+    gsl::span<const uint32_t> payloadWithoutTrailer;
+    if (lastword >> 30 == 3) {
+      // lastword is a trailer word
+      // decode trailer and chop
+      auto trailer = RCUTrailer::constructFromPayloadWords(mRawBuffer.getDataWords());
+      if (!mCurrentTrailer.isInitialized()) {
+        mCurrentTrailer = trailer;
+      } else {
+        mCurrentTrailer.setPayloadSize(mCurrentTrailer.getPayloadSize() + trailer.getPayloadSize());
+      }
+      payloadWithoutTrailer = gsl::span<const uint32_t>(mRawBuffer.getDataWords().data(), mRawBuffer.getDataWords().size() - trailer.getTrailerSize());
     } else {
-      mCurrentTrailer.setPayloadSize(mCurrentTrailer.getPayloadSize() + trailer.getPayloadSize());
+      // Not a trailer word = copy page as it is
+      payloadWithoutTrailer = mRawBuffer.getDataWords(); // No trailer to be chopped
     }
-    gsl::span<const uint32_t> payloadWithoutTrailer(mRawBuffer.getDataWords().data(), mRawBuffer.getDataWords().size() - trailer.getTrailerSize());
 
     mRawPayload.appendPayloadWords(payloadWithoutTrailer);
     mRawPayload.increasePageCount();
@@ -131,8 +147,9 @@ void RawReaderMemory::nextPage(bool doResetPayload)
 void RawReaderMemory::readPage(int page)
 {
   int currentposition = 8192 * page;
-  if (currentposition >= mRawMemoryBuffer.size())
+  if (currentposition >= mRawMemoryBuffer.size()) {
     throw RawDecodingError(RawDecodingError::ErrorType_t::PAGE_NOTFOUND);
+  }
   mRawHeaderInitialized = false;
   mPayloadInitialized = false;
   // Read header
@@ -152,14 +169,16 @@ void RawReaderMemory::readPage(int page)
 
 const o2::header::RDHAny& RawReaderMemory::getRawHeader() const
 {
-  if (!mRawHeaderInitialized)
+  if (!mRawHeaderInitialized) {
     throw RawDecodingError(RawDecodingError::ErrorType_t::HEADER_INVALID);
+  }
   return mRawHeader;
 }
 
 const RawBuffer& RawReaderMemory::getRawBuffer() const
 {
-  if (!mPayloadInitialized)
+  if (!mPayloadInitialized) {
     throw RawDecodingError(RawDecodingError::ErrorType_t::PAYLOAD_INVALID);
+  }
   return mRawBuffer;
 }

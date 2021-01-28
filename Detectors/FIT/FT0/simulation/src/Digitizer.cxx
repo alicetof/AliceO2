@@ -150,26 +150,29 @@ double Digitizer::measure_amplitude(const std::vector<float>& times) const
 void Digitizer::process(const std::vector<o2::ft0::HitType>* hits,
                         std::vector<o2::ft0::Digit>& digitsBC,
                         std::vector<o2::ft0::ChannelData>& digitsCh,
+                        std::vector<o2::ft0::DetTrigInput>& digitsTrig,
                         o2::dataformats::MCTruthContainer<o2::ft0::MCLabel>& label)
 {
   ;
   //Calculating signal time, amplitude in mean_time +- time_gate --------------
   LOG(DEBUG) << " process firstBCinDeque " << firstBCinDeque << " mIntRecord " << mIntRecord;
   if (firstBCinDeque != mIntRecord) {
-    flush(digitsBC, digitsCh, label);
+    flush(digitsBC, digitsCh, digitsTrig, label);
   }
 
   Int_t parent = -10;
   for (auto const& hit : *hits) {
-    if (hit.GetEnergyLoss() > 0)
+    if (hit.GetEnergyLoss() > 0) {
       continue;
+    }
 
     Int_t hit_ch = hit.GetDetectorID();
     Bool_t is_A_side = (hit_ch < 4 * mParameters.nCellsA);
     Float_t time_compensate = is_A_side ? mParameters.A_side_cable_cmps : mParameters.C_side_cable_cmps;
     Double_t hit_time = hit.GetTime() - time_compensate;
-    if (hit_time > 250)
+    if (hit_time > 250) {
       continue; //not collect very slow particles
+    }
     auto relBC = o2::InteractionRecord{hit_time};
     if (mCache.size() <= relBC.bc) {
       mCache.resize(relBC.bc + 1);
@@ -187,10 +190,12 @@ void Digitizer::process(const std::vector<o2::ft0::HitType>* hits,
 void Digitizer::storeBC(BCCache& bc,
                         std::vector<o2::ft0::Digit>& digitsBC,
                         std::vector<o2::ft0::ChannelData>& digitsCh,
+                        std::vector<o2::ft0::DetTrigInput>& digitsTrig,
                         o2::dataformats::MCTruthContainer<o2::ft0::MCLabel>& labels)
 {
-  if (bc.hits.empty())
+  if (bc.hits.empty()) {
     return;
+  }
   int n_hit_A = 0, n_hit_C = 0, mean_time_A = 0, mean_time_C = 0;
   int summ_ampl_A = 0, summ_ampl_C = 0;
   int vertex_time;
@@ -216,14 +221,16 @@ void Digitizer::storeBC(BCCache& bc,
     mDeadTimes[ipmt].intrec = firstBCinDeque;
     mDeadTimes[ipmt].deadTime = cfd.deadTime;
 
-    if (!cfd.particle)
+    if (!cfd.particle) {
       continue;
+    }
     int smeared_time = 1000. * (*cfd.particle - mParameters.mCfdShift) * mParameters.ChannelWidthInverse;
     bool is_time_in_signal_gate = (smeared_time > -mParameters.mTime_trg_gate && smeared_time < mParameters.mTime_trg_gate);
     float charge = measure_amplitude(channel_times) * mParameters.charge2amp;
     float amp = is_time_in_signal_gate ? mParameters.mV_2_Nchannels * charge : 0;
-    if (amp > 4095)
+    if (amp > 4095) {
       amp = 4095;
+    }
     LOG(DEBUG) << mEventID << " bc " << firstBCinDeque.bc << " orbit " << firstBCinDeque.orbit << ", ipmt " << ipmt << ", smeared_time " << smeared_time << " nStored " << nStored;
     digitsCh.emplace_back(ipmt, smeared_time, int(amp), chain);
     nStored++;
@@ -261,11 +268,12 @@ void Digitizer::storeBC(BCCache& bc,
   if (nStored > 0) {
     triggers.setTriggers(is_A, is_C, isVertex, is_Central, is_SemiCentral, int8_t(n_hit_A), int8_t(n_hit_C),
                          amplA, amplC, timeA, timeC);
-
     digitsBC.emplace_back(first, nStored, firstBCinDeque, triggers, mEventID - 1);
+    digitsTrig.emplace_back(firstBCinDeque, is_A, is_C, isVertex, is_Central, is_SemiCentral);
     size_t const nBC = digitsBC.size();
-    for (auto const& lbl : bc.labels)
+    for (auto const& lbl : bc.labels) {
       labels.addElement(nBC - 1, lbl);
+    }
   }
   // Debug output -------------------------------------------------------------
 
@@ -280,12 +288,14 @@ void Digitizer::storeBC(BCCache& bc,
 //------------------------------------------------------------------------
 void Digitizer::flush(std::vector<o2::ft0::Digit>& digitsBC,
                       std::vector<o2::ft0::ChannelData>& digitsCh,
+                      std::vector<o2::ft0::DetTrigInput>& digitsTrig,
                       o2::dataformats::MCTruthContainer<o2::ft0::MCLabel>& labels)
 {
 
   assert(firstBCinDeque <= mIntRecord);
+
   while (firstBCinDeque < mIntRecord && !mCache.empty()) {
-    storeBC(mCache.front(), digitsBC, digitsCh, labels);
+    storeBC(mCache.front(), digitsBC, digitsCh, digitsTrig, labels);
     mCache.pop_front();
     ++firstBCinDeque;
   }
@@ -294,12 +304,14 @@ void Digitizer::flush(std::vector<o2::ft0::Digit>& digitsBC,
 
 void Digitizer::flush_all(std::vector<o2::ft0::Digit>& digitsBC,
                           std::vector<o2::ft0::ChannelData>& digitsCh,
+                          std::vector<o2::ft0::DetTrigInput>& digitsTrig,
                           o2::dataformats::MCTruthContainer<o2::ft0::MCLabel>& labels)
 {
-  assert(firstBCinDeque < mIntRecord);
+
+  assert(firstBCinDeque <= mIntRecord);
   ++mEventID;
   while (!mCache.empty()) {
-    storeBC(mCache.front(), digitsBC, digitsCh, labels);
+    storeBC(mCache.front(), digitsBC, digitsCh, digitsTrig, labels);
     mCache.pop_front();
     ++firstBCinDeque;
   }

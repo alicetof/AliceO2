@@ -39,10 +39,11 @@ void RawWriter::init()
         break;
       case FileFor_t::kSubDet: {
         std::string detstring;
-        if (iddl < 22)
+        if (iddl < 22) {
           detstring = "emcal";
-        else
+        } else {
           detstring = "dcal";
+        }
         rawfilename += fmt::format("/{:s}.raw", detstring.data());
         break;
       };
@@ -52,8 +53,9 @@ void RawWriter::init()
     mRawWriter->registerLink(iddl, crorc, link, 0, rawfilename.data());
   }
   // initialize mappers
-  if (!mMappingHandler)
+  if (!mMappingHandler) {
     mMappingHandler = std::make_unique<o2::emcal::MappingHandler>();
+  }
 
   // initialize containers for SRU
   for (auto isru = 0; isru < 40; isru++) {
@@ -73,16 +75,18 @@ void RawWriter::digitsToRaw(gsl::span<o2::emcal::Digit> digitsbranch, gsl::span<
 
 bool RawWriter::processTrigger(const o2::emcal::TriggerRecord& trg)
 {
-  for (auto srucont : mSRUdata)
+  for (auto srucont : mSRUdata) {
     srucont.mChannels.clear();
+  }
   std::vector<o2::emcal::Digit*>* bunchDigits;
   int lasttower = -1;
   for (auto& dig : gsl::span(mDigits.data() + trg.getFirstEntry(), trg.getNumberOfObjects())) {
     auto tower = dig.getTower();
     if (tower != lasttower) {
       lasttower = tower;
-      if (tower > 20000)
+      if (tower > 20000) {
         std::cout << "Wrong cell ID " << tower << std::endl;
+      }
       auto onlineindices = getOnlineID(tower);
       int sruID = std::get<0>(onlineindices);
       auto towerdata = mSRUdata[sruID].mChannels.find(tower);
@@ -117,15 +121,30 @@ bool RawWriter::processTrigger(const o2::emcal::TriggerRecord& trg)
 
       std::vector<int> rawbunches;
       for (auto& bunch : findBunches(channel.mDigits)) {
+        rawbunches.push_back(bunch.mADCs.size() + 2); // add 2 words for header information
         rawbunches.push_back(bunch.mStarttime);
-        rawbunches.push_back(bunch.mADCs.size());
         for (auto adc : bunch.mADCs) {
           rawbunches.push_back(adc);
         }
       }
+      if (!rawbunches.size()) {
+        continue;
+      }
       auto encodedbunches = encodeBunchData(rawbunches);
-      auto chanhead = createChannelHeader(hwaddress, encodedbunches.size() * 3 - 2, false); /// bad channel status eventually to be added later
+      auto chanhead = createChannelHeader(hwaddress, rawbunches.size(), false); /// bad channel status eventually to be added later
       char* chanheadwords = reinterpret_cast<char*>(&chanhead);
+      uint32_t* testheader = reinterpret_cast<uint32_t*>(chanheadwords);
+      if ((*testheader >> 30) & 1) {
+        // header pattern found, check that the payload size is properly reflecting the number of words
+        uint32_t payloadsizeRead = ((*testheader >> 16) & 0x3FF);
+        uint32_t nwordsRead = (payloadsizeRead + 2) / 3;
+        if (encodedbunches.size() != nwordsRead) {
+          LOG(ERROR) << "Mismatch in number of 32-bit words, encoded " << encodedbunches.size() << ", recalculated " << nwordsRead << std::endl;
+          LOG(ERROR) << "Payload size: " << payloadsizeRead << ", number of words: " << rawbunches.size() << ", encodeed words " << encodedbunches.size() << ", calculated words " << nwordsRead << std::endl;
+        }
+      } else {
+        LOG(ERROR) << "Header without header bit detected ..." << std::endl;
+      }
       for (int iword = 0; iword < sizeof(ChannelHeader) / sizeof(char); iword++) {
         payload.emplace_back(chanheadwords[iword]);
       }
@@ -135,16 +154,21 @@ bool RawWriter::processTrigger(const o2::emcal::TriggerRecord& trg)
       }
     }
 
+    if (!payload.size()) {
+      continue;
+    }
+
     // Create RCU trailer
     auto trailerwords = createRCUTrailer(payload.size() / 4, 16, 16, 100., 0.);
-    for (auto word : trailerwords)
+    for (auto word : trailerwords) {
       payload.emplace_back(word);
+    }
 
     // register output data
     auto ddlid = srucont.mSRUid;
     auto [crorc, link] = getLinkAssignment(ddlid);
     LOG(DEBUG1) << "Adding payload with size " << payload.size() << " (" << payload.size() / 4 << " ALTRO words)";
-    mRawWriter->addData(ddlid, crorc, link, 0, trg.getBCData(), payload);
+    mRawWriter->addData(ddlid, crorc, link, 0, trg.getBCData(), payload, false, trg.getTriggerBits());
   }
   std::cout << "Done" << std::endl;
   return true;
@@ -178,8 +202,9 @@ std::vector<AltroBunch> RawWriter::findBunches(const std::vector<o2::emcal::Digi
     currentBunch->mADCs.emplace_back(adc);
   }
   // if we have a last bunch set time start time to the time bin of teh previous digit
-  if (currentBunch)
+  if (currentBunch) {
     currentBunch->mStarttime = itime + 1;
+  }
   return result;
 }
 
@@ -192,16 +217,18 @@ std::tuple<int, int, int> RawWriter::getOnlineID(int towerID)
   int row = std::get<0>(etaphishift), col = std::get<1>(etaphishift);
 
   int ddlInSupermoudel = -1;
-  if (0 <= row && row < 8)
+  if (0 <= row && row < 8) {
     ddlInSupermoudel = 0; // first cable row
-  else if (8 <= row && row < 16 && 0 <= col && col < 24)
+  } else if (8 <= row && row < 16 && 0 <= col && col < 24) {
     ddlInSupermoudel = 0; // first half;
-  else if (8 <= row && row < 16 && 24 <= col && col < 48)
+  } else if (8 <= row && row < 16 && 24 <= col && col < 48) {
     ddlInSupermoudel = 1; // second half;
-  else if (16 <= row && row < 24)
+  } else if (16 <= row && row < 24) {
     ddlInSupermoudel = 1; // third cable row
-  if (supermoduleID % 2 == 1)
+  }
+  if (supermoduleID % 2 == 1) {
     ddlInSupermoudel = 1 - ddlInSupermoudel; // swap for odd=C side, to allow us to cable both sides the same
+  }
 
   return std::make_tuple(supermoduleID * 2 + ddlInSupermoudel, row, col);
 }
@@ -231,14 +258,16 @@ std::vector<int> RawWriter::encodeBunchData(const std::vector<int>& data)
         currentword.mWord2 = adc;
         break;
     };
-    if (wordnumber == 2) {
+    wordnumber++;
+    if (wordnumber == 3) {
       // start new word;
       encoded.push_back(currentword.mDataWord);
       currentword.mDataWord = 0;
       wordnumber = 0;
-    } else {
-      wordnumber++;
     }
+  }
+  if (wordnumber) {
+    encoded.push_back(currentword.mDataWord);
   }
   return encoded;
 }
@@ -249,6 +278,7 @@ ChannelHeader RawWriter::createChannelHeader(int hardwareAddress, int payloadSiz
   header.mHardwareAddress = hardwareAddress;
   header.mPayloadSize = payloadSize;
   header.mBadChannel = isBadChannel ? 1 : 0;
+  header.mHeaderBits = 1;
   return header;
 }
 

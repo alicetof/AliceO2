@@ -14,6 +14,7 @@
 #include "ITSWorkflow/TrackReaderSpec.h"
 #include "TPCWorkflow/TrackReaderSpec.h"
 #include "TPCWorkflow/PublisherSpec.h"
+#include "TPCWorkflow/ClusterSharingMapSpec.h"
 #include "FT0Workflow/RecPointReaderSpec.h"
 #include "GlobalTrackingWorkflow/TPCITSMatchingSpec.h"
 #include "GlobalTrackingWorkflow/MatchTPCITSWorkflow.h"
@@ -27,7 +28,7 @@ namespace o2
 namespace globaltracking
 {
 
-framework::WorkflowSpec getMatchTPCITSWorkflow(bool useFT0, bool useMC, bool disableRootInp, bool disableRootOut)
+framework::WorkflowSpec getMatchTPCITSWorkflow(bool useFT0, bool useMC, bool disableRootInp, bool disableRootOut, bool calib)
 {
   framework::WorkflowSpec specs;
 
@@ -52,12 +53,14 @@ framework::WorkflowSpec getMatchTPCITSWorkflow(bool useFT0, bool useMC, bool dis
                                                    tpcClusSectors,
                                                    tpcClusLanes},
                                                  useMC));
+    specs.emplace_back(o2::tpc::getClusterSharingMapSpec());
 
     if (useFT0) {
       specs.emplace_back(o2::ft0::getRecPointReaderSpec(useMC));
     }
   }
-  specs.emplace_back(o2::globaltracking::getTPCITSMatchingSpec(useFT0, useMC, tpcClusLanes));
+
+  specs.emplace_back(o2::globaltracking::getTPCITSMatchingSpec(useFT0, calib, useMC, tpcClusLanes));
 
   if (!disableRootOut) {
     specs.emplace_back(o2::globaltracking::getTrackWriterTPCITSSpec(useMC));

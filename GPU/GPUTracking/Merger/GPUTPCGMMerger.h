@@ -68,6 +68,8 @@ class GPUTPCGMMerger : public GPUProcessor
     GPUAtomic(unsigned int) nUnpackedTracks;
     GPUAtomic(unsigned int) nOutputTracks;
     GPUAtomic(unsigned int) nOutputTrackClusters;
+    GPUAtomic(unsigned int) nO2Tracks;
+    GPUAtomic(unsigned int) nO2ClusRefs;
     const GPUTPCTrack* firstGlobalTracks[NSLICES];
     GPUAtomic(unsigned int) tmpCounter[2 * NSLICES];
   };
@@ -86,6 +88,10 @@ class GPUTPCGMMerger : public GPUProcessor
   void* SetPointersRefitScratch(void* mem);
   void* SetPointersRefitScratch2(void* mem);
   void* SetPointersOutput(void* mem);
+  void* SetPointersOutputO2(void* mem);
+  void* SetPointersOutputO2Clus(void* mem);
+  void* SetPointersOutputO2MC(void* mem);
+  void* SetPointersOutputState(void* mem);
   void* SetPointersMemory(void* mem);
 
   void SetSliceData(int index, const GPUTPCSliceOutput* sliceData) { mkSlices[index] = sliceData; }
@@ -97,27 +103,37 @@ class GPUTPCGMMerger : public GPUProcessor
     return mOutputTracks;
   }
 
-  GPUhd() unsigned int NClusters() const { return mNClusters; }
-  GPUhd() unsigned int NMaxClusters() const { return mNMaxClusters; }
-  GPUhd() unsigned int NMaxTracks() const { return mNMaxTracks; }
-  GPUhd() unsigned int NMaxOutputTrackClusters() const { return mNMaxOutputTrackClusters; }
-  GPUhd() unsigned int NOutputTrackClusters() const { return mMemory->nOutputTrackClusters; }
-  GPUhd() const GPUTPCGMMergedTrackHit* Clusters() const { return mClusters; }
-  GPUhd() GPUTPCGMMergedTrackHit* Clusters() { return (mClusters); }
-  GPUhd() const GPUTPCGMMergedTrackHitXYZ* ClustersXYZ() const { return mClustersXYZ; }
-  GPUhd() GPUTPCGMMergedTrackHitXYZ* ClustersXYZ() { return (mClustersXYZ); }
+  GPUhdi() unsigned int NClusters() const { return mNClusters; }
+  GPUhdi() unsigned int NMaxClusters() const { return mNMaxClusters; }
+  GPUhdi() unsigned int NMaxTracks() const { return mNMaxTracks; }
+  GPUhdi() unsigned int NMaxOutputTrackClusters() const { return mNMaxOutputTrackClusters; }
+  GPUhdi() unsigned int NOutputTrackClusters() const { return mMemory->nOutputTrackClusters; }
+  GPUhdi() const GPUTPCGMMergedTrackHit* Clusters() const { return mClusters; }
+  GPUhdi() GPUTPCGMMergedTrackHit* Clusters() { return (mClusters); }
+  GPUhdi() const GPUTPCGMMergedTrackHitXYZ* ClustersXYZ() const { return mClustersXYZ; }
+  GPUhdi() GPUTPCGMMergedTrackHitXYZ* ClustersXYZ() { return (mClustersXYZ); }
   GPUhdi() GPUAtomic(unsigned int) * ClusterAttachment() const { return mClusterAttachment; }
   GPUhdi() unsigned int* TrackOrderAttach() const { return mTrackOrderAttach; }
   GPUhdi() unsigned int* TrackOrderProcess() const { return mTrackOrderProcess; }
   GPUhdi() unsigned int* RetryRefitIds() const { return mRetryRefitIds; }
+  GPUhdi() unsigned char* ClusterStateExt() const { return mClusterStateExt; }
   GPUhdi() GPUTPCGMLoopData* LoopData() const { return mLoopData; }
   GPUhdi() memory* Memory() const { return mMemory; }
   GPUhdi() GPUAtomic(unsigned int) * TmpCounter() { return mMemory->tmpCounter; }
   GPUhdi() uint4* TmpMem() { return mTmpMem; }
   GPUhdi() gputpcgmmergertypes::GPUTPCGMBorderRange* BorderRange(int i) { return mBorderRange[i]; }
+  GPUhdi() o2::tpc::TrackTPC* OutputTracksTPCO2() { return mOutputTracksTPCO2; }
+  GPUhdi() unsigned int* OutputClusRefsTPCO2() { return mOutputClusRefsTPCO2; }
+  GPUhdi() o2::MCCompLabel* OutputTracksTPCO2MC() { return mOutputTracksTPCO2MC; }
+  GPUhdi() unsigned int NOutputTracksTPCO2() const { return mMemory->nO2Tracks; }
+  GPUhdi() unsigned int NOutputClusRefsTPCO2() const { return mMemory->nO2ClusRefs; }
 
   GPUd() unsigned short MemoryResMemory() { return mMemoryResMemory; }
   GPUd() unsigned short MemoryResOutput() const { return mMemoryResOutput; }
+  GPUd() unsigned short MemoryResOutputState() const { return mMemoryResOutputState; }
+  GPUd() unsigned short MemoryResOutputO2() const { return mMemoryResOutputO2; }
+  GPUd() unsigned short MemoryResOutputO2Clus() const { return mMemoryResOutputO2Clus; }
+  GPUd() unsigned short MemoryResOutputO2MC() const { return mMemoryResOutputO2MC; }
 
   GPUd() int RefitSliceTrack(GPUTPCGMSliceTrack& sliceTrack, const GPUTPCTrack* inTrack, float alpha, int slice);
   GPUd() void SetTrackClusterZT(GPUTPCGMSliceTrack& track, int iSlice, const GPUTPCTrack* sliceTr);
@@ -152,6 +168,7 @@ class GPUTPCGMMerger : public GPUProcessor
   GPUd() void ResolveFindConnectedComponentsHookLinks(int nBlocks, int nThreads, int iBlock, int iThread);
   GPUd() void ResolveFindConnectedComponentsMultiJump(int nBlocks, int nThreads, int iBlock, int iThread);
   GPUd() void ResolveMergeSlices(gputpcgmmergertypes::GPUResolveSharedMemory& smem, int nBlocks, int nThreads, int iBlock, int iThread, char useOrigTrackParam, char mergeAll);
+  GPUd() void MergeLoopers(int nBlocks, int nThreads, int iBlock, int iThread);
 
 #ifndef GPUCA_GPUCODE
   void DumpSliceTracks(std::ostream& out);
@@ -174,7 +191,10 @@ class GPUTPCGMMerger : public GPUProcessor
   void CheckMergedTracks();
 #ifndef GPUCA_GPUCODE
   void PrintMergeGraph(const GPUTPCGMSliceTrack* trk, std::ostream& out);
-  int GetTrackLabel(const GPUTPCGMBorderTrack& trk);
+  template <class T, class S>
+  long int GetTrackLabelA(const S& trk);
+  template <class S>
+  long int GetTrackLabel(const S& trk);
 #endif
 
   GPUdi() int SliceTrackInfoFirst(int iSlice)
@@ -206,18 +226,26 @@ class GPUTPCGMMerger : public GPUProcessor
 
   unsigned short mMemoryResMemory;
   unsigned short mMemoryResOutput;
+  unsigned short mMemoryResOutputState;
+  unsigned short mMemoryResOutputO2;
+  unsigned short mMemoryResOutputO2Clus;
+  unsigned short mMemoryResOutputO2MC;
 
   int mNClusters;                     // Total number of incoming clusters (from slice tracks)
   GPUTPCGMMergedTrack* mOutputTracks; //* array of output merged tracks
-
   GPUTPCGMSliceTrack* mSliceTrackInfos; //* additional information for slice tracks
   int* mSliceTrackInfoIndex;
   GPUTPCGMMergedTrackHit* mClusters;
   GPUTPCGMMergedTrackHitXYZ* mClustersXYZ;
   int* mGlobalClusterIDs;
   GPUAtomic(unsigned int) * mClusterAttachment;
+  o2::tpc::TrackTPC* mOutputTracksTPCO2;
+  unsigned int* mOutputClusRefsTPCO2;
+  o2::MCCompLabel* mOutputTracksTPCO2MC;
+
   unsigned int* mTrackOrderAttach;
   unsigned int* mTrackOrderProcess;
+  unsigned char* mClusterStateExt;
   uint4* mTmpMem;
   GPUTPCGMBorderTrack* mBorderMemory; // memory for border tracks
   GPUTPCGMBorderTrack* mBorder[2 * NSLICES];

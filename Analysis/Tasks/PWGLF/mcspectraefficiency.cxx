@@ -11,9 +11,9 @@
 // O2 includes
 #include "Framework/AnalysisTask.h"
 #include "Framework/AnalysisDataModel.h"
-#include "Analysis/MC.h"
+#include "AnalysisCore/MC.h"
 #include "Framework/ASoAHelpers.h"
-#include "Analysis/TrackSelectionTables.h"
+#include "AnalysisDataModel/TrackSelectionTables.h"
 
 // ROOT includes
 #include <TH1F.h>
@@ -64,8 +64,9 @@ struct GeneratedTask {
   {
     LOGF(info, "MC. vtx-z = %f", mcCollision.posZ());
     for (auto& mcParticle : mcParticles) {
-      if (abs(mcParticle.eta()) > 0.8)
+      if (abs(mcParticle.eta()) > 0.8) {
         continue;
+      }
       if (isPhysicalPrimary(mcParticles, mcParticle)) {
         const auto pdg = Form("%i", mcParticle.pdgCode());
         pdgH->Fill(pdg, 1);
@@ -103,7 +104,7 @@ struct ReconstructedTask {
   OutputObj<TH2F> pDiff{TH2F("pDiff", "pDiff;#it{p}_{MC} #it{p}_{Rec} (GeV/#it{c})", 500, -2, 2, PDGBINNING)};
 
   Filter trackAcceptance = (nabs(aod::track::eta) < 0.8f);
-  Filter trackCuts = ((aod::track::isGlobalTrack == true) || (aod::track::isGlobalTrackSDD == true));
+  Filter trackCuts = ((aod::track::isGlobalTrack == (uint8_t) true) || (aod::track::isGlobalTrackSDD == (uint8_t) true));
 
   void process(soa::Join<aod::Collisions, aod::McCollisionLabels>::iterator const& collision,
                soa::Filtered<soa::Join<aod::Tracks, aod::TracksExtra, aod::TracksExtended, aod::McTrackLabels, aod::TrackSelection>> const& tracks,
@@ -130,10 +131,12 @@ struct ReconstructedTask {
 
       etaDiff->Fill(track.label().eta() - track.eta(), pdgbin);
       auto delta = track.label().phi() - track.phi();
-      if (delta > M_PI)
+      if (delta > M_PI) {
         delta -= 2 * M_PI;
-      if (delta < -M_PI)
+      }
+      if (delta < -M_PI) {
         delta += 2 * M_PI;
+      }
       phiDiff->Fill(delta, pdgbin);
       pDiff->Fill(sqrt(track.label().px() * track.label().px() + track.label().py() * track.label().py() + track.label().pz() * track.label().pz()) - track.p(), pdgbin);
       ptDiff->Fill(track.label().pt() - track.pt(), pdgbin);
@@ -147,11 +150,14 @@ WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
   const bool gen = cfgc.options().get<int>("add-gen");
   const bool reco = cfgc.options().get<int>("add-reco");
   WorkflowSpec workflow{};
-  if (vertex)
+  if (vertex) {
     workflow.push_back(adaptAnalysisTask<VertexTask>("vertex-histogram"));
-  if (gen)
+  }
+  if (gen) {
     workflow.push_back(adaptAnalysisTask<GeneratedTask>("generator-histogram"));
-  if (reco)
+  }
+  if (reco) {
     workflow.push_back(adaptAnalysisTask<ReconstructedTask>("reconstructed-histogram"));
+  }
   return workflow;
 }

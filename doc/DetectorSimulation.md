@@ -44,9 +44,9 @@ The purpose of the `o2-sim` executable is to simulate the passage of particles e
 | `o2sim_grp.root`      | special global run parameters (grp) such as field                                      |
 | `o2sim_XXXHits.root`  | hit file for each participating active detector XXX                                    |
 | `o2sim_configuration.ini` | summary of parameter values with which the simulation was done                     |
-| `serverlog` | log file produced from the particle generator server |
-| `workerlog` | log file produced form the transportation processes |
-| `hitmergerlog` | log file produced from the IO process |
+| `o2sim_serverlog` | log file produced from the particle generator server |
+| `o2sim_workerlog` | log file produced form the transportation processes |
+| `o2sim_hitmergerlog` | log file produced from the IO process |
 
 
 * **Main command line options**: The following major options are available (incomplete):
@@ -441,6 +441,8 @@ for (int pos = 0; pos < alldigits.size(); ++pos) {
   }
 }
 ```
+Note, that one can also access kinematics directly after the transport simulation. 
+In this case, one needs to initialize the MCKinematicsReader in a different mode.
 
 # Simulation tutorials/examples <a name="Examples"></a>
 
@@ -454,7 +456,10 @@ Other helpful resources are the scripts used for regression testing in [prodtest
 | [AliRoot_AMPT](../run/SimExamples/AliRoot_AMPT) | Example showing how to use AMPT from AliRoot for event generation |
 | [Adaptive_Pythia8](../run/SimExamples/Adaptive_Pythia8) | Complex example showing **generator configuration for embedding** that cat adapt the response based on the background event |
 | [Signal_ImpactB](../run/SimExamples/Signal_ImpactB) | Example showing **generator configuration for embedding** that cat adapt to the impact parameter of the background event |
+| [PrimaryKinematics](../run/SimExamples/JustPrimaryKinematics) | Example showing how to obtain only primary kinematics via transport configuration |
 | [HepMC_STARlight](../run/SimExamples/HepMC_STARlight) | Simple example showing **generator configuration** that runs a standalone `STARlight` generation that couples to the `o2` via a `HepMC` file |
 | [Jet_Embedding_Pythia](../run/SimExamples/Jet_Embedding_Pythia8) | Complex example showing **generator configuration**, **digitization embedding**, **MCTrack access** |
+| [Selective_Transport](../run/SimExamples/Selective_Transport) | Simple example showing how to run simulation transporting only a custumisable set of particles |
+| [Custom_EventInfo](../run/SimExamples/Custom_EventInfo) | Simple example showing how to add custom information to the MC event header |
 | [sim_challenge.sh](../prodtests/sim_challenge.sh) | Basic example doing a **simple transport, digitization, reconstruction pipeline** on the full dectector. All stages use parallelism. |
 | [sim_performance.sh](../prodtests/sim_performance_test.sh) | Basic example for serial transport and linearized digitization sequence (one detector after the other). Serves as standard performance candle. |  

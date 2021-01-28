@@ -48,7 +48,16 @@ DataProcessorSpec getDigitWriterSpec(bool mctruth, o2::header::DataOrigin detOri
 
   // the callback to be set as hook for custom action when the writer is closed
   auto finishWriting = [](TFile* outputfile, TTree* outputtree) {
-    outputtree->SetEntries(1);
+    const auto* brArr = outputtree->GetListOfBranches();
+    int64_t nent = 0;
+    for (const auto* brc : *brArr) {
+      int64_t n = ((const TBranch*)brc)->GetEntries();
+      if (nent && (nent != n)) {
+        LOG(ERROR) << "Branches have different number of entries";
+      }
+      nent = n;
+    }
+    outputtree->SetEntries(nent);
     outputtree->Write("", TObject::kOverwrite);
     outputfile->Close();
   };
@@ -61,7 +70,8 @@ DataProcessorSpec getDigitWriterSpec(bool mctruth, o2::header::DataOrigin detOri
     LOG(INFO) << "WRITING " << labels.getNElements() << " LABELS ";
 
     o2::dataformats::IOMCTruthContainerView outputcontainer;
-    auto br = framework::RootTreeWriter::remapBranch(branch, &outputcontainer);
+    auto ptr = &outputcontainer;
+    auto br = framework::RootTreeWriter::remapBranch(branch, &ptr);
     outputcontainer.adopt(labelbuffer);
     br->Fill();
     br->ResetAddress();

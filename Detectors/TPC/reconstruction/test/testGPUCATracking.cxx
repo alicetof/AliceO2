@@ -27,7 +27,7 @@
 #include "TPCFastTransform.h"
 #include "TPCdEdxCalibrationSplines.h"
 #include "GPUO2InterfaceConfiguration.h"
-#include "TPCCFCalibration.h"
+#include "TPCPadGainCalib.h"
 
 using namespace o2::gpu;
 
@@ -77,8 +77,8 @@ BOOST_AUTO_TEST_CASE(CATracking_test1)
   config.configCalib.fastTransform = fastTransform.get();
   std::unique_ptr<o2::gpu::TPCdEdxCalibrationSplines> dEdxSplines(new TPCdEdxCalibrationSplines);
   config.configCalib.dEdxSplines = dEdxSplines.get();
-  std::unique_ptr<TPCCFCalibration> tpcCalibration(new TPCCFCalibration{});
-  config.configCalib.tpcCalibration = tpcCalibration.get();
+  std::unique_ptr<TPCPadGainCalib> gainCalib(new TPCPadGainCalib{});
+  config.configCalib.tpcPadGain = gainCalib.get();
 
   tracker.initialize(config);
   std::vector<ClusterNativeContainer> cont(constants::MAXGLOBALPADROW);
@@ -98,15 +98,11 @@ BOOST_AUTO_TEST_CASE(CATracking_test1)
   std::unique_ptr<ClusterNativeAccess> clusters = ClusterNativeHelper::createClusterNativeIndex(clusterBuffer, cont, nullptr, nullptr);
 
   GPUO2InterfaceIOPtrs ptrs;
-  std::vector<TrackTPC> tracks;
   ptrs.clusters = clusters.get();
-  ptrs.outputTracks = &tracks;
-  std::vector<TPCClRefElem> trackClusRefs;
-  ptrs.outputClusRefs = &trackClusRefs;
 
   int retVal = tracker.runTracking(&ptrs);
   BOOST_CHECK_EQUAL(retVal, 0);
-  BOOST_CHECK_EQUAL((int)tracks.size(), 1);
+  BOOST_CHECK_EQUAL((int)ptrs.outputTracks.size(), 1);
 }
 } // namespace tpc
 } // namespace o2

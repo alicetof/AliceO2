@@ -25,7 +25,7 @@
 #include "DataFormatsITSMFT/ROFRecord.h"
 #include "CommonDataFormat/InteractionRecord.h"
 #include "DetectorsVertexing/PVertexerParams.h"
-#include "MathUtils/Bracket.h"
+#include "MathUtils/Primitive2D.h"
 
 namespace o2
 {
@@ -42,9 +42,9 @@ class VertexTrackMatcher
   using TrackITS = o2::its::TrackITS;
   using ITSROFR = o2::itsmft::ROFRecord;
   using TrackTPC = o2::tpc::TrackTPC;
-  using TmpMap = std::unordered_map<int, std::vector<GIndex>>;
+  using TmpMap = std::vector<std::vector<GIndex>>;
   using TimeEst = o2::dataformats::TimeStampWithError<float, float>;
-  using TBracket = o2::utils::Bracket<float>;
+  using TBracket = o2::math_utils::Bracketf_t;
 
   void init();
   void process(const gsl::span<const PVertex>& vertices,   // vertices

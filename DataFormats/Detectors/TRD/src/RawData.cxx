@@ -50,6 +50,14 @@ uint16_t buildTRDFeeID(int supermodule, int side, int endpoint)
   return feeid.word;
 }
 
+void buildTrackletMCMData(TrackletMCMData& trackletword, const uint slope, const uint pos, const uint q0, const uint q1, const uint q2)
+{
+  trackletword.slope = slope;
+  trackletword.pos = pos;
+  trackletword.pid = q0 | ((q1 & 0xff) << 8); //q2 sits with a bit of q1 in the header pid word.
+  trackletword.checkbit = 1;
+}
+
 uint32_t getlinkerrorflag(const HalfCRUHeader& cruhead, const uint32_t link)
 {
   // link is the link you are requesting information on, 0-14
@@ -170,8 +178,9 @@ void printHalfCRUHeader(o2::trd::HalfCRUHeader const& halfcru)
   getlinkerrorflags(halfcru, errorflags);
   LOGF(INFO, "V:%d BC:%d SB:%d EType:%d", halfcru.HeaderVersion, halfcru.BunchCrossing,
        halfcru.StopBit, halfcru.EventType);
-  for (int i = 0; i < 15; i++)
+  for (int i = 0; i < 15; i++) {
     LOGF(INFO, "Link %d size: %ul eflag: 0x%02x", i, sizes[i], errorflags[i]);
+  }
 }
 
 void dumpHalfCRUHeader(o2::trd::HalfCRUHeader& halfcru)
@@ -193,12 +202,14 @@ std::ostream& operator<<(std::ostream& stream, const HalfCRUHeader& halfcru)
   stream << "BunchCrossing : " << halfcru.BunchCrossing << std::endl;
   stream << "HeaderVersion : " << halfcru.HeaderVersion << std::endl;
   stream << "link  sizes : ";
-  for (int link = 0; link < 15; link++)
+  for (int link = 0; link < 15; link++) {
     stream << link << ":" << std::hex << std::setw(4) << getlinkdatasize(halfcru, link) << ",";
+  }
   stream << std::endl;
   stream << "link  errorflags : ";
-  for (int link = 0; link < 15; link++)
+  for (int link = 0; link < 15; link++) {
     stream << link << ":" << std::hex << std::setw(2) << getlinkerrorflag(halfcru, link) << ",";
+  }
   stream << std::endl;
   stream << "0x" << std::hex << halfcru.word0 << " 0x" << halfcru.word12[0] << " 0x" << halfcru.word12[1] << " 0x" << halfcru.word3 << " 0x" << halfcru.word47[0] << " 0x" << halfcru.word47[1] << " 0x" << halfcru.word47[2] << " 0x" << halfcru.word47[3] << std::endl;
   return stream;

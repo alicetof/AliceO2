@@ -347,14 +347,20 @@ class RootTreeWriter
   /// The function needs to be used with care. The user should ensure that "branch" is no longer used
   /// after a call to this function.
   template <typename T>
-  static TBranch* remapBranch(TBranch& branch, T* newdata)
+  static TBranch* remapBranch(TBranch& branchRef, T** newdata)
   {
-    auto name = branch.GetName();
-    auto branchleaves = branch.GetListOfLeaves();
-    auto tree = branch.GetTree();
-    branch.DropBaskets("all");
-    branch.DeleteBaskets("all");
-    tree->GetListOfBranches()->Remove(&branch);
+    auto tree = branchRef.GetTree();
+    auto name = branchRef.GetName();
+    auto branch = tree->GetBranch(name); // the input branch might actually no belong to the tree but to TreeWriter cache
+    assert(branch);
+    if (branch->GetEntries()) { // if it has entries, then it was already remapped/filled at prevous event
+      branch->SetAddress(newdata);
+      return branch;
+    }
+    auto branchleaves = branch->GetListOfLeaves();
+    branch->DropBaskets("all");
+    branch->DeleteBaskets("all");
+    tree->GetListOfBranches()->Remove(branch);
     for (auto entry : *branchleaves) {
       tree->GetListOfLeaves()->Remove(entry);
     }
@@ -634,9 +640,10 @@ class RootTreeWriter
       // A helper struct mimicking data layout of std::vector containers
       // We assume a standard layout of begin, end, end_capacity
       struct VecBase {
-        const ElementType* start;
-        const ElementType* end;
-        const ElementType* cap;
+        VecBase() = default;
+        const ElementType* start = nullptr;
+        const ElementType* end = nullptr;
+        const ElementType* cap = nullptr;
       };
 
       // a low level hack to make a gsl::span appear as a std::vector so that ROOT serializes the correct type
@@ -671,7 +678,7 @@ class RootTreeWriter
         if (ptr) {
           delete ptr;
         }
-      } catch (const std::runtime_error& e) {
+      } catch (RuntimeErrorRef e) {
         if constexpr (has_root_dictionary<value_type>::value == true) {
           // try extracting from message with serialization method ROOT
           auto data = context.get<typename std::add_pointer<value_type>::type>(ref);

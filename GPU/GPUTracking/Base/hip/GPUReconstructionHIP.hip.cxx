@@ -54,7 +54,7 @@ __global__ void gGPUConstantMemBuffer_dummy(int* p) { *p = *(int*)&gGPUConstantM
 
 using namespace GPUCA_NAMESPACE::gpu;
 
-__global__ void dummyInitKernel(void* foo) {}
+__global__ void dummyInitKernel(void*) {}
 
 #if defined(HAVE_O2HEADERS) && !defined(GPUCA_NO_ITS_TRAITS)
 #include "ITStrackingHIP/VertexerTraitsHIP.h"
@@ -478,7 +478,7 @@ size_t GPUReconstructionHIPBackend::TransferMemoryInternal(GPUMemoryResource* re
     }
     return 0;
   }
-  if (mProcessingSettings.debugLevel >= 3) {
+  if (mProcessingSettings.debugLevel >= 3 && (strcmp(res->Name(), "ErrorCodes") || mProcessingSettings.debugLevel >= 4)) {
     GPUInfo("Copying to %s: %s - %lld bytes", toGPU ? "GPU" : "Host", res->Name(), (long long int)res->Size());
   }
   return GPUMemCpy(dst, src, res->Size(), stream, toGPU, ev, evList, nEvents);

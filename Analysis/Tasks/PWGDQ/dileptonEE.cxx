@@ -14,11 +14,11 @@
 #include "Framework/AnalysisTask.h"
 #include "Framework/AnalysisDataModel.h"
 #include "Framework/ASoAHelpers.h"
-#include "Analysis/ReducedInfoTables.h"
-#include "Analysis/VarManager.h"
-#include "Analysis/HistogramManager.h"
-#include "Analysis/AnalysisCut.h"
-#include "Analysis/AnalysisCompositeCut.h"
+#include "AnalysisDataModel/ReducedInfoTables.h"
+#include "PWGDQCore/VarManager.h"
+#include "PWGDQCore/HistogramManager.h"
+#include "PWGDQCore/AnalysisCut.h"
+#include "PWGDQCore/AnalysisCompositeCut.h"
 #include <TH1F.h>
 #include <TMath.h>
 #include <THashList.h>
@@ -154,14 +154,16 @@ struct BarrelTrackSelection {
 
   void process(MyEvent event, MyBarrelTracks const& tracks)
   {
-    for (int i = 0; i < VarManager::kNVars; ++i)
+    for (int i = 0; i < VarManager::kNVars; ++i) {
       fValues[i] = -9999.0f;
+    }
     // fill event information which might be needed in histograms that combine track and event properties
     VarManager::FillEvent<fgEventFillMap>(event, fValues);
 
     for (auto& track : tracks) {
-      for (int i = VarManager::kNEventWiseVariables; i < VarManager::kNMuonTrackVariables; ++i)
+      for (int i = VarManager::kNEventWiseVariables; i < VarManager::kNMuonTrackVariables; ++i) {
         fValues[i] = -9999.0f;
+      }
       VarManager::FillTrack<fgTrackFillMap>(track, fValues);
       fHistMan->FillHistClass("TrackBarrel_BeforeCuts", fValues);
 
@@ -172,8 +174,9 @@ struct BarrelTrackSelection {
       ) {
         trackSel(1);
         fHistMan->FillHistClass("TrackBarrel_AfterCuts", fValues);
-      } else
+      } else {
         trackSel(0);
+      }
     }
   }
 };
@@ -219,8 +222,9 @@ struct DileptonEE {
 
     VarManager::FillEvent<fgEventFillMap>(event);
     fHistMan->FillHistClass("Event_BeforeCuts", VarManager::fgValues); // automatically fill all the histograms in the class Event
-    if (!fEventCut->IsSelected(VarManager::fgValues))
+    if (!fEventCut->IsSelected(VarManager::fgValues)) {
       return;
+    }
     fHistMan->FillHistClass("Event_AfterCuts", VarManager::fgValues);
 
     // Run the same event pairing for barrel tracks
@@ -268,11 +272,12 @@ void DefineHistograms(o2::framework::OutputObj<HistogramManager> histMan, TStrin
   const int kNRuns = 2;
   int runs[kNRuns] = {244918, 244919};
   TString runsStr;
-  for (int i = 0; i < kNRuns; i++)
+  for (int i = 0; i < kNRuns; i++) {
     runsStr += Form("%d;", runs[i]);
+  }
   VarManager::SetRunNumbers(kNRuns, runs);
 
-  TObjArray* arr = histClasses.Tokenize(";");
+  std::unique_ptr<TObjArray> arr(histClasses.Tokenize(";"));
   for (Int_t iclass = 0; iclass < arr->GetEntries(); ++iclass) {
     TString classStr = arr->At(iclass)->GetName();
 

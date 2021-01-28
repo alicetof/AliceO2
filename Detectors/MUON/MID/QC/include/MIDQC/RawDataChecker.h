@@ -20,6 +20,7 @@
 #include <gsl/gsl>
 #include "DataFormatsMID/ROFRecord.h"
 #include "MIDRaw/CrateMasks.h"
+#include "MIDRaw/ElectronicsDelay.h"
 #include "MIDRaw/LocalBoardRO.h"
 #include "MIDQC/GBTRawDataChecker.h"
 
@@ -42,9 +43,15 @@ class RawDataChecker
   std::string getDebugMessage() const { return mDebugMsg; }
   void clear();
 
+  /// Sets the delay in the electronics
+  void setElectronicsDelay(const ElectronicsDelay& electronicsDelay) { mElectronicsDelay = electronicsDelay; }
+
+  void setSyncTrigger(uint32_t syncTrigger);
+
  private:
   std::array<GBTRawDataChecker, crateparams::sNGBTs> mCheckers{}; /// GBT raw data checker
   std::string mDebugMsg{};                                        /// Debug message
+  ElectronicsDelay mElectronicsDelay{};                           /// Delays in the electronics
 };
 } // namespace mid
 } // namespace o2

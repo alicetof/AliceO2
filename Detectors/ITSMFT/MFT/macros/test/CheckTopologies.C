@@ -23,7 +23,7 @@
 #include "DataFormatsITSMFT/ClusterTopology.h"
 #include "DataFormatsITSMFT/ROFRecord.h"
 #include "ITSMFTSimulation/Hit.h"
-#include "MathUtils/Cartesian3D.h"
+#include "MathUtils/Cartesian.h"
 #include "SimulationDataFormat/MCCompLabel.h"
 #include "SimulationDataFormat/MCTruthContainer.h"
 #include "DetectorsCommonDataFormats/NameConf.h"
@@ -35,7 +35,9 @@
 void CheckTopologies(std::string clusfile = "mftclusters.root",
                      std::string hitfile = "o2sim_HitsMFT.root",
                      std::string collContextfile = "collisioncontext.root",
-                     std::string inputGeom = "")
+                     std::string inputGeom = "",
+                     float checkOutliers = 2. // reject outliers (MC dX or dZ exceeds row/col span by a factor above the threshold)
+)
 {
   const int QEDSourceID = 99; // Clusters from this MC source correspond to QED electrons
 
@@ -61,8 +63,8 @@ void CheckTopologies(std::string clusfile = "mftclusters.root",
   // Geometry
   o2::base::GeometryManager::loadGeometry(inputGeom);
   auto gman = o2::mft::GeometryTGeo::Instance();
-  gman->fillMatrixCache(o2::utils::bit2Mask(o2::TransformType::T2L, o2::TransformType::T2GRot,
-                                            o2::TransformType::L2G)); // request cached transforms
+  gman->fillMatrixCache(o2::math_utils::bit2Mask(o2::math_utils::TransformType::T2L, o2::math_utils::TransformType::T2GRot,
+                                                 o2::math_utils::TransformType::L2G)); // request cached transforms
 
   // Hits
   TFile* fileH = nullptr;
@@ -211,6 +213,12 @@ void CheckTopologies(std::string clusfile = "mftclusters.root",
             const auto locC = o2::itsmft::TopologyDictionary::getClusterCoordinates(cluster, pattern);
             dX = locH.X() - locC.X();
             dZ = locH.Z() - locC.Z();
+            if (checkOutliers > 0.) {
+              if (std::abs(dX) > topology.getRowSpan() * o2::itsmft::SegmentationAlpide::PitchRow * checkOutliers ||
+                  std::abs(dZ) > topology.getColumnSpan() * o2::itsmft::SegmentationAlpide::PitchCol * checkOutliers) { // ignore outlier
+                dX = dZ = BuildTopologyDictionary::IgnoreVal;
+              }
+            }
           } else {
             printf("Failed to find MC hit entry for Tr:%d chipID:%d\n", trID, chipID);
             lab.print();

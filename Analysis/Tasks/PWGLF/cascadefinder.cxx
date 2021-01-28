@@ -8,23 +8,40 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 //
-// This task re-reconstructs the V0s and cascades
+// Cascade Finder task
+// ===================
+//
+// This code loops over existing V0s and bachelor tracks and finds
+// valid cascade candidates from scratch using a certain set of
+// minimum (configurable) selection criteria.
+//
+// It is different than the producer: the producer merely
+// loops over an *existing* list of cascades (V0+bachelor track
+// indices) and calculates the corresponding full cascade information
+//
+// In both cases, any analysis should loop over the "CascData"
+// table as that table contains all information.
+//
+//    Comments, questions, complaints, suggestions?
+//    Please write to:
+//    david.dobrigkeit.chinellato@cern.ch
+//
 
 #include "Framework/runDataProcessing.h"
 #include "Framework/AnalysisTask.h"
 #include "Framework/AnalysisDataModel.h"
 #include "Framework/ASoAHelpers.h"
-#include "Analysis/SecondaryVertexHF.h"
+#include "AnalysisDataModel/HFSecondaryVertex.h"
 #include "DetectorsVertexing/DCAFitterN.h"
 #include "ReconstructionDataFormats/Track.h"
-#include "Analysis/RecoDecay.h"
-#include "Analysis/trackUtilities.h"
-#include "PID/PIDResponse.h"
-#include "Analysis/StrangenessTables.h"
-#include "Analysis/TrackSelection.h"
-#include "Analysis/TrackSelectionTables.h"
-#include "Analysis/EventSelection.h"
-#include "Analysis/Centrality.h"
+#include "AnalysisCore/RecoDecay.h"
+#include "AnalysisCore/trackUtilities.h"
+#include "AnalysisDataModel/PID/PIDResponse.h"
+#include "AnalysisDataModel/StrangenessTables.h"
+#include "AnalysisCore/TrackSelection.h"
+#include "AnalysisDataModel/TrackSelectionTables.h"
+#include "AnalysisDataModel/EventSelection.h"
+#include "AnalysisDataModel/Centrality.h"
 
 #include <TFile.h>
 #include <TLorentzVector.h>
@@ -47,8 +64,6 @@ using namespace ROOT::Math;
 namespace o2::aod
 {
 
-using V0FinderFull = soa::Join<aod::V0FinderData, aod::V0DataExt>;
-
 namespace cascgoodpostracks
 {
 DECLARE_SOA_INDEX_COLUMN_FULL(GoodPosTrack, goodPosTrack, int, FullTracks, "fGoodPosTrackID");
@@ -65,13 +80,13 @@ DECLARE_SOA_COLUMN(DCAXY, dcaXY, float);
 DECLARE_SOA_TABLE(CascGoodNegTracks, "AOD", "CASCGOODNTRACKS", o2::soa::Index<>, cascgoodnegtracks::GoodNegTrackId, cascgoodnegtracks::CollisionId, cascgoodnegtracks::DCAXY);
 namespace cascgoodlambdas
 {
-DECLARE_SOA_INDEX_COLUMN_FULL(GoodLambda, goodLambda, int, V0FinderFull, "fGoodLambdaId");
+DECLARE_SOA_INDEX_COLUMN_FULL(GoodLambda, goodLambda, int, V0DataExt, "fGoodLambdaId");
 DECLARE_SOA_INDEX_COLUMN(Collision, collision);
 } // namespace cascgoodlambdas
 DECLARE_SOA_TABLE(CascGoodLambdas, "AOD", "CASCGOODLAM", o2::soa::Index<>, cascgoodlambdas::GoodLambdaId, cascgoodlambdas::CollisionId);
 namespace cascgoodantilambdas
 {
-DECLARE_SOA_INDEX_COLUMN_FULL(GoodAntiLambda, goodAntiLambda, int, V0FinderFull, "fGoodAntiLambdaId");
+DECLARE_SOA_INDEX_COLUMN_FULL(GoodAntiLambda, goodAntiLambda, int, V0DataExt, "fGoodAntiLambdaId");
 DECLARE_SOA_INDEX_COLUMN(Collision, collision);
 } // namespace cascgoodantilambdas
 DECLARE_SOA_TABLE(CascGoodAntiLambdas, "AOD", "CASCGOODALAM", o2::soa::Index<>, cascgoodantilambdas::GoodAntiLambdaId, cascgoodantilambdas::CollisionId);
@@ -82,6 +97,7 @@ struct cascadeprefilter {
   Configurable<int> mincrossedrows{"mincrossedrows", 70, "min crossed rows"};
   Configurable<float> dcav0topv{"dcav0topv", .1, "DCA V0 To PV"};
   Configurable<double> cospaV0{"cospaV0", .98, "CosPA V0"};
+  Configurable<double> v0radius{"v0radius", 0.9, "v0radius"};
   Configurable<float> lambdamasswindow{"lambdamasswindow", .006, "Distance from Lambda mass"};
   Configurable<float> dcav0dau{"dcav0dau", .6, "DCA V0 Daughters"};
   Configurable<float> dcanegtopv{"dcanegtopv", .1, "DCA Neg To PV"};
@@ -95,43 +111,58 @@ struct cascadeprefilter {
   Partition<soa::Join<aod::FullTracks, aod::TracksExtended>> goodPosTracks = aod::track::signed1Pt > 0.0f && aod::track::dcaXY > dcabachtopv;
   Partition<soa::Join<aod::FullTracks, aod::TracksExtended>> goodNegTracks = aod::track::signed1Pt < 0.0f && aod::track::dcaXY < -dcabachtopv;
 
-  Partition<soa::Join<aod::V0FinderData, aod::V0DataExt>> goodV0s = aod::v0data::dcapostopv > dcapostopv&& aod::v0data::dcanegtopv > dcanegtopv&& aod::v0data::dcaV0daughters < dcav0dau;
+  Partition<aod::V0DataExt> goodV0s = aod::v0data::dcapostopv > dcapostopv&& aod::v0data::dcanegtopv > dcanegtopv&& aod::v0data::dcaV0daughters < dcav0dau;
+
+  using FullTracksExt = soa::Join<aod::FullTracks, aod::TracksExtended>;
 
   void process(aod::Collision const& collision,
-               soa::Join<aod::FullTracks, aod::TracksExtended> const& tracks,
-               soa::Join<aod::V0FinderData, aod::V0DataExt> const& V0s)
+               FullTracksExt const& tracks,
+               aod::V0DataExt const& V0s)
   {
     for (auto& t0 : goodPosTracks) {
-      if (!(t0.flags() & 0x40))
+      if (!(t0.trackType() & o2::aod::track::TPCrefit)) {
         continue; //TPC refit
-      if (t0.tpcNClsCrossedRows() < mincrossedrows)
+      }
+      if (t0.tpcNClsCrossedRows() < mincrossedrows) {
         continue;
+      }
       cascGoodPosTracks(t0.globalIndex(), t0.collisionId(), t0.dcaXY());
     }
     for (auto& t0 : goodNegTracks) {
-      if (!(t0.flags() & 0x40))
+      if (!(t0.trackType() & o2::aod::track::TPCrefit)) {
         continue; //TPC refit
-      if (t0.tpcNClsCrossedRows() < mincrossedrows)
+      }
+      if (t0.tpcNClsCrossedRows() < mincrossedrows) {
         continue;
+      }
       cascGoodNegTracks(t0.globalIndex(), t0.collisionId(), -t0.dcaXY());
     }
     for (auto& v0 : goodV0s) {
-      if (v0.v0cosPA(collision.posX(), collision.posY(), collision.posZ()) < cospaV0)
+      if (v0.v0cosPA(collision.posX(), collision.posY(), collision.posZ()) < cospaV0) {
         continue;
-      if (v0.dcav0topv(collision.posX(), collision.posY(), collision.posZ()) < dcav0topv)
+      }
+      if (v0.dcav0topv(collision.posX(), collision.posY(), collision.posZ()) < dcav0topv) {
         continue;
+      }
+      if (v0.dcaV0daughters() > dcav0dau) {
+        continue;
+      }
+      if (v0.v0radius() < v0radius) {
+        continue;
+      }
 
-      if (fabs(v0.mLambda() - 1.116) < lambdamasswindow)
+      if (fabs(v0.mLambda() - 1.116) < lambdamasswindow) {
         cascGoodLambdas(v0.globalIndex(), v0.collisionId());
-      if (fabs(v0.mAntiLambda() - 1.116) < lambdamasswindow)
+      }
+      if (fabs(v0.mAntiLambda() - 1.116) < lambdamasswindow) {
         cascGoodAntiLambdas(v0.globalIndex(), v0.collisionId());
+      }
     }
   }
 };
 
 struct cascadefinder {
   Produces<aod::CascData> cascdata;
-  Produces<aod::CascFinderData> cascfinderdata;
 
   OutputObj<TH1F> hCandPerEvent{TH1F("hCandPerEvent", "", 100, 0, 100)};
 
@@ -147,7 +178,7 @@ struct cascadefinder {
   //Process: subscribes to a lot of things!
   void process(aod::Collision const& collision,
                aod::FullTracks const& tracks,
-               soa::Join<aod::V0FinderData, aod::V0DataExt> const& V0s,
+               aod::V0DataExt const& V0s,
                aod::CascGoodLambdas const& lambdas,
                aod::CascGoodAntiLambdas const& antiLambdas,
                aod::CascGoodPosTracks const& pBachtracks,
@@ -193,8 +224,9 @@ struct cascadefinder {
       if (nCand != 0) {
         fitterV0.propagateTracksToVertex();
         const auto& v0vtx = fitterV0.getPCACandidate();
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 3; i++) {
           pos[i] = v0vtx[i];
+        }
 
         std::array<float, 21> cov0 = {0};
         std::array<float, 21> cov1 = {0};
@@ -232,14 +264,15 @@ struct cascadefinder {
           if (nCand2 != 0) {
             fitterCasc.propagateTracksToVertex();
             const auto& cascvtx = fitterCasc.getPCACandidate();
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 3; i++) {
               posXi[i] = cascvtx[i];
+            }
             fitterCasc.getTrack(1).getPxPyPzGlo(pvecbach);
 
             lNCand++;
             //If we got here, it means this is a good candidate!
-            cascfinderdata(v0.globalIndex(), t0.globalIndex(), t0.collisionId());
-            cascdata(-1, posXi[0], posXi[1], posXi[2], pos[0], pos[1], pos[2],
+            cascdata(v0.globalIndex(), v0.posTrack().globalIndex(), v0.negTrack().collisionId(),
+                     -1, posXi[0], posXi[1], posXi[2], pos[0], pos[1], pos[2],
                      pvecpos[0], pvecpos[1], pvecpos[2],
                      pvecneg[0], pvecneg[1], pvecneg[2],
                      pvecbach[0], pvecbach[1], pvecbach[2],
@@ -263,8 +296,9 @@ struct cascadefinder {
       if (nCand != 0) {
         fitterV0.propagateTracksToVertex();
         const auto& v0vtx = fitterV0.getPCACandidate();
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 3; i++) {
           pos[i] = v0vtx[i];
+        }
 
         std::array<float, 21> cov0 = {0};
         std::array<float, 21> cov1 = {0};
@@ -302,14 +336,15 @@ struct cascadefinder {
           if (nCand2 != 0) {
             fitterCasc.propagateTracksToVertex();
             const auto& cascvtx = fitterCasc.getPCACandidate();
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 3; i++) {
               posXi[i] = cascvtx[i];
+            }
             fitterCasc.getTrack(1).getPxPyPzGlo(pvecbach);
 
             lNCand++;
             //If we got here, it means this is a good candidate!
-            cascfinderdata(v0.globalIndex(), t0.globalIndex(), t0.collisionId());
-            cascdata(+1, posXi[0], posXi[1], posXi[2], pos[0], pos[1], pos[2],
+            cascdata(v0.globalIndex(), v0.posTrack().globalIndex(), v0.negTrack().collisionId(),
+                     +1, posXi[0], posXi[1], posXi[2], pos[0], pos[1], pos[2],
                      pvecpos[0], pvecpos[1], pvecpos[2],
                      pvecneg[0], pvecneg[1], pvecneg[2],
                      pvecbach[0], pvecbach[1], pvecbach[2],
@@ -352,12 +387,14 @@ struct cascadefinderQA {
                                                                                                           aod::cascdata::dcaV0daughters < dcav0dau&& aod::cascdata::dcacascdaughters < dcacascdau;
 
   ///Connect to CascFinderData: newly indexed, note: CascDataExt table incompatible with standard V0 table!
-  void process(soa::Join<aod::Collisions, aod::EvSels, aod::Cents>::iterator const& collision, soa::Filtered<soa::Join<aod::CascFinderData, aod::CascDataExt>> const& Cascades)
+  void process(soa::Join<aod::Collisions, aod::EvSels, aod::Cents>::iterator const& collision, soa::Filtered<aod::CascDataExt> const& Cascades)
   {
-    if (!collision.alias()[kINT7])
+    if (!collision.alias()[kINT7]) {
       return;
-    if (!collision.sel7())
+    }
+    if (!collision.sel7()) {
       return;
+    }
     for (auto& casc : Cascades) {
       //FIXME: dynamic columns cannot be filtered on?
       if (casc.v0radius() > v0radius &&
@@ -366,22 +403,26 @@ struct cascadefinderQA {
           casc.casccosPA(collision.posX(), collision.posY(), collision.posZ()) > casccospa &&
           casc.dcav0topv(collision.posX(), collision.posY(), collision.posZ()) > dcav0topv) {
         if (casc.charge() < 0) { //FIXME: could be done better...
-          if (TMath::Abs(casc.yXi()) < 0.5)
+          if (TMath::Abs(casc.yXi()) < 0.5) {
             h3dMassXiMinus->Fill(collision.centV0M(), casc.pt(), casc.mXi());
-          if (TMath::Abs(casc.yOmega()) < 0.5)
+          }
+          if (TMath::Abs(casc.yOmega()) < 0.5) {
             h3dMassOmegaMinus->Fill(collision.centV0M(), casc.pt(), casc.mOmega());
+          }
         } else {
-          if (TMath::Abs(casc.yXi()) < 0.5)
+          if (TMath::Abs(casc.yXi()) < 0.5) {
             h3dMassXiPlus->Fill(collision.centV0M(), casc.pt(), casc.mXi());
-          if (TMath::Abs(casc.yOmega()) < 0.5)
+          }
+          if (TMath::Abs(casc.yOmega()) < 0.5) {
             h3dMassOmegaPlus->Fill(collision.centV0M(), casc.pt(), casc.mOmega());
+          }
         }
       }
     }
   }
 };
 
-/// Extends the v0data table with expression columns
+/// Extends the cascdata table with expression columns
 struct cascadeinitializer {
   Spawns<aod::CascDataExt> cascdataext;
   void init(InitContext const&) {}
@@ -392,6 +433,6 @@ WorkflowSpec defineDataProcessing(ConfigContext const&)
   return WorkflowSpec{
     adaptAnalysisTask<cascadeprefilter>("lf-cascadeprefilter"),
     adaptAnalysisTask<cascadefinder>("lf-cascadefinder"),
-    adaptAnalysisTask<cascadeinitializer>("lf-cascadeinitializer"),
-    adaptAnalysisTask<cascadefinderQA>("lf-cascadefinderQA")};
+    adaptAnalysisTask<cascadefinderQA>("lf-cascadefinderQA"),
+    adaptAnalysisTask<cascadeinitializer>("lf-cascadeinitializer")};
 }

@@ -9,7 +9,8 @@
 // or submit itself to any jurisdiction.
 #include "Framework/CommonServices.h"
 #include "Framework/ParallelContext.h"
-#include "Framework/TextControlService.h"
+#include "Framework/ControlService.h"
+#include "Framework/DriverClient.h"
 #include "Framework/CallbackService.h"
 #include "Framework/TimesliceIndex.h"
 #include "Framework/ServiceRegistry.h"
@@ -23,6 +24,7 @@
 #include "Framework/EndOfStreamContext.h"
 #include "Framework/Tracing.h"
 #include "Framework/Monitoring.h"
+#include "TextDriverClient.h"
 #include "../src/DataProcessingStatus.h"
 
 #include <Configuration/ConfigurationInterface.h>
@@ -70,6 +72,10 @@ o2::framework::ServiceSpec CommonServices::monitoringSpec()
                      nullptr,
                      nullptr,
                      nullptr,
+                     nullptr,
+                     nullptr,
+                     nullptr,
+                     nullptr,
                      ServiceKind::Serial};
 }
 
@@ -78,6 +84,10 @@ o2::framework::ServiceSpec CommonServices::infologgerContextSpec()
   return ServiceSpec{"infologger-contex",
                      simpleServiceInit<InfoLoggerContext, InfoLoggerContext>(),
                      noConfiguration(),
+                     nullptr,
+                     nullptr,
+                     nullptr,
+                     nullptr,
                      nullptr,
                      nullptr,
                      nullptr,
@@ -172,6 +182,10 @@ o2::framework::ServiceSpec CommonServices::infologgerSpec()
                      nullptr,
                      nullptr,
                      nullptr,
+                     nullptr,
+                     nullptr,
+                     nullptr,
+                     nullptr,
                      ServiceKind::Serial};
 }
 
@@ -197,6 +211,35 @@ o2::framework::ServiceSpec CommonServices::configurationSpec()
     nullptr,
     nullptr,
     nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    ServiceKind::Global};
+}
+
+o2::framework::ServiceSpec CommonServices::driverClientSpec()
+{
+  return ServiceSpec{
+    "driverClient",
+    [](ServiceRegistry& services, DeviceState& state, fair::mq::ProgOptions& options) -> ServiceHandle {
+      return ServiceHandle{TypeIdHelpers::uniqueId<DriverClient>(),
+                           new TextDriverClient(services, state)};
+    },
+    noConfiguration(),
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
     ServiceKind::Global};
 }
 
@@ -206,9 +249,13 @@ o2::framework::ServiceSpec CommonServices::controlSpec()
     "control",
     [](ServiceRegistry& services, DeviceState& state, fair::mq::ProgOptions& options) -> ServiceHandle {
       return ServiceHandle{TypeIdHelpers::uniqueId<ControlService>(),
-                           new TextControlService(services, state)};
+                           new ControlService(services, state)};
     },
     noConfiguration(),
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
     nullptr,
     nullptr,
     nullptr,
@@ -227,6 +274,10 @@ o2::framework::ServiceSpec CommonServices::rootFileSpec()
     "localrootfile",
     simpleServiceInit<LocalRootFileService, LocalRootFileService>(),
     noConfiguration(),
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
     nullptr,
     nullptr,
     nullptr,
@@ -258,6 +309,10 @@ o2::framework::ServiceSpec CommonServices::parallelSpec()
     nullptr,
     nullptr,
     nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
     ServiceKind::Serial};
 }
 
@@ -267,6 +322,10 @@ o2::framework::ServiceSpec CommonServices::timesliceIndex()
     "timesliceindex",
     simpleServiceInit<TimesliceIndex, TimesliceIndex>(),
     noConfiguration(),
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
     nullptr,
     nullptr,
     nullptr,
@@ -294,6 +353,10 @@ o2::framework::ServiceSpec CommonServices::callbacksSpec()
     nullptr,
     nullptr,
     nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
     ServiceKind::Serial};
 }
 
@@ -310,6 +373,10 @@ o2::framework::ServiceSpec CommonServices::dataRelayer()
                                            services.get<TimesliceIndex>())};
     },
     noConfiguration(),
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
     nullptr,
     nullptr,
     nullptr,
@@ -349,6 +416,10 @@ o2::framework::ServiceSpec CommonServices::tracingSpec()
     nullptr,
     nullptr,
     nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
     ServiceKind::Serial};
 }
 
@@ -377,10 +448,14 @@ o2::framework::ServiceSpec CommonServices::threadPool(int numWorkers)
     nullptr,
     nullptr,
     nullptr,
+    nullptr,
     [numWorkers](ServiceRegistry& service) -> void {
       auto numWorkersS = std::to_string(numWorkers);
       setenv("UV_THREADPOOL_SIZE", numWorkersS.c_str(), 0);
     },
+    nullptr,
+    nullptr,
+    nullptr,
     nullptr,
     ServiceKind::Serial};
 }
@@ -481,6 +556,10 @@ o2::framework::ServiceSpec CommonServices::dataProcessingStats()
     nullptr,
     nullptr,
     nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr,
     ServiceKind::Serial};
 }
 
@@ -488,6 +567,7 @@ std::vector<ServiceSpec> CommonServices::defaultServices(int numThreads)
 {
   std::vector<ServiceSpec> specs{
     timesliceIndex(),
+    driverClientSpec(),
     monitoringSpec(),
     infologgerContextSpec(),
     infologgerSpec(),

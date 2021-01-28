@@ -18,7 +18,7 @@
 #include "GPUProcessor.h"
 #include "GPUDataTypes.h"
 #include "CfFragment.h"
-#include "TPCCFCalibration.h"
+#include "TPCPadGainCalib.h"
 
 namespace o2
 {
@@ -29,6 +29,8 @@ namespace dataformats
 {
 template <typename TruthElement>
 class MCTruthContainer;
+template <typename TruthElement>
+class ConstMCTruthContainerView;
 } // namespace dataformats
 
 namespace tpc
@@ -42,9 +44,11 @@ class Digit;
 namespace GPUCA_NAMESPACE::gpu
 {
 struct GPUTPCClusterMCInterim;
-struct TPCCFCalibration;
+struct TPCPadGainCalib;
 
 struct ChargePos;
+
+class GPUTPCGeometry;
 
 class GPUTPCClusterFinder : public GPUProcessor
 {
@@ -94,6 +98,7 @@ class GPUTPCClusterFinder : public GPUProcessor
   unsigned char* mPzs = nullptr;
   ZSOffset* mPzsOffsets = nullptr;
   MinMaxCN* mMinMaxCN = nullptr;
+  unsigned char* mPpadHasLostBaseline = nullptr;
   tpc::Digit* mPdigits = nullptr; // input digits, only set if ZS is skipped
   ChargePos* mPpositions = nullptr;
   ChargePos* mPpeakPositions = nullptr;
@@ -111,7 +116,7 @@ class GPUTPCClusterFinder : public GPUProcessor
   int* mPbuf = nullptr;
   Memory* mPmemory = nullptr;
 
-  o2::dataformats::MCTruthContainer<o2::MCCompLabel> const* mPinputLabels = nullptr;
+  o2::dataformats::ConstMCTruthContainerView<o2::MCCompLabel> const* mPinputLabels = nullptr;
   uint* mPlabelsInRow = nullptr;
   uint mPlabelsHeaderGlobalOffset = 0;
   uint mPlabelsDataGlobalOffset = 0;
@@ -133,7 +138,7 @@ class GPUTPCClusterFinder : public GPUProcessor
   short mZSOffsetId = -1;
   short mOutputId = -1;
 
-  GPUdi() float getGainCorrection(tpccf::Row, tpccf::Pad) const;
+  GPUdi() const GPUTPCGeometry* getGeometry() const;
 
 #ifndef GPUCA_GPUCODE
   void DumpDigits(std::ostream& out);

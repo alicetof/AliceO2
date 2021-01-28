@@ -21,6 +21,7 @@
 #include "CommonDataFormat/InteractionRecord.h"
 #include "DataFormatsMID/ROFRecord.h"
 #include "MIDRaw/CrateParameters.h"
+#include "MIDRaw/ElectronicsDelay.h"
 #include "MIDRaw/ELinkDecoder.h"
 #include "MIDRaw/LocalBoardRO.h"
 
@@ -34,27 +35,23 @@ class GBTOutputHandler
   /// Sets the FEE Id
   void setFeeId(uint16_t feeId) { mFeeId = feeId; }
 
-  void setIR(uint16_t bc, uint32_t orbit, int pageCnt);
+  void set(uint32_t orbit, std::vector<LocalBoardRO>& data, std::vector<ROFRecord>& rofs);
 
   void onDoneLoc(size_t ilink, const ELinkDecoder& decoder);
   void onDoneLocDebug(size_t ilink, const ELinkDecoder& decoder);
   void onDoneReg(size_t, const ELinkDecoder&){}; /// Dummy function
   void onDoneRegDebug(size_t ilink, const ELinkDecoder& decoder);
 
-  /// Gets the vector of data
-  const std::vector<LocalBoardRO>& getData() const { return mData; }
-
-  /// Gets the vector of data RO frame records
-  const std::vector<ROFRecord>& getROFRecords() const { return mROFRecords; }
-
-  void clear();
+  /// Sets the delay in the electronics
+  void setElectronicsDelay(const ElectronicsDelay& electronicsDelay) { mElectronicsDelay = electronicsDelay; }
 
  private:
-  std::vector<LocalBoardRO> mData{};    /// Vector of output data
-  std::vector<ROFRecord> mROFRecords{}; /// List of ROF records
-  uint16_t mFeeId{0};                   /// FEE ID
-  InteractionRecord mIRFirstPage{};     /// Interaction record of the first page
-  uint16_t mReceivedCalibration{0};     /// Word with one bit per e-link indicating if the calibration trigger was received by the e-link
+  std::vector<LocalBoardRO>* mData{nullptr};    ///! Vector of output data. Not owner
+  std::vector<ROFRecord>* mROFRecords{nullptr}; /// List of ROF records. Not owner
+  uint16_t mFeeId{0};                           /// FEE ID
+  uint32_t mOrbit{};                            /// RDH orbit
+  uint16_t mReceivedCalibration{0};             /// Word with one bit per e-link indicating if the calibration trigger was received by the e-link
+  ElectronicsDelay mElectronicsDelay{};         /// Delays in the electronics
 
   std::array<InteractionRecord, crateparams::sNELinksPerGBT> mIRs{};     /// Interaction records per link
   std::array<uint16_t, crateparams::sNELinksPerGBT> mExpectedFETClock{}; /// Expected FET clock

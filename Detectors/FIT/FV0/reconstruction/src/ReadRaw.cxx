@@ -121,8 +121,9 @@ void ReadRaw::readRawData(const LookUpTable& lut)
 
 void ReadRaw::close()
 {
-  if (mRawFileIn.is_open())
+  if (mRawFileIn.is_open()) {
     mRawFileIn.close();
+  }
 }
 
 void ReadRaw::writeDigits(const std::string& outputDigitsFilePath)
@@ -153,7 +154,8 @@ void ReadRaw::writeDigits(const std::string& outputDigitsFilePath)
       chDataVecTree.emplace_back(int(sec.pmtNumber), float(sec.time), Short_t(sec.chargeAdc));
       nStored++;
     }
-    chBcVecTree.emplace_back(first, nStored, digit.first);
+    Triggers triggers; // TODO: Actual values are not set
+    chBcVecTree.emplace_back(first, nStored, digit.first, triggers);
   }
 
   outTree->Branch("FV0DigitBC", &chBcVecTree);

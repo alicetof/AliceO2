@@ -62,9 +62,10 @@ class GPUCommonMath
   GPUd() static float Sin(float x);
   GPUd() static float Cos(float x);
   GPUhdni() static void SinCos(float x, float& s, float& c);
-  GPUhdni() static void SinCos(double x, double& s, double& c);
+  GPUhdni() static void SinCosd(double x, double& s, double& c);
   GPUd() static float Tan(float x);
   GPUhdni() static float Copysign(float x, float y);
+  GPUhdni() static double Copysignd(double x, double y);
   GPUd() static float TwoPi() { return 6.28319f; }
   GPUd() static float Pi() { return 3.1415926535897f; }
   GPUd() static int Nint(float x);
@@ -146,6 +147,23 @@ class GPUCommonMath
   template <int I, class T>
   GPUd() CONSTEXPR17 static T nextMultipleOf(T val);
 
+#ifdef GPUCA_NOCOMPAT
+  GPUdi() static float Sum2() // Needed for legacy C++, For >=17 the below if constexpr handles the case
+  {
+    return 0.f;
+  }
+
+  template <typename... Args>
+  GPUdi() static float Sum2(float w, Args... args)
+  {
+    if CONSTEXPR17 (sizeof...(Args) == 0) {
+      return w * w;
+    } else {
+      return w * w + Sum2(args...);
+    }
+  }
+#endif
+
  private:
   template <class S, class T>
   GPUd() static unsigned int AtomicExchInt(S* addr, T val);
@@ -172,15 +190,13 @@ typedef GPUCommonMath CAMath;
 template <int I, class T>
 GPUdi() CONSTEXPR17 T GPUCommonMath::nextMultipleOf(T val)
 {
-  CONSTEXPRIF(I & (I - 1))
-  {
+  if CONSTEXPR17 (I & (I - 1)) {
     T tmp = val % I;
-    if (tmp)
+    if (tmp) {
       val += I - tmp;
+    }
     return val;
-  }
-  else
-  {
+  } else {
     return (val + I - 1) & ~(T)(I - 1);
   }
   return 0; // BUG: Cuda complains about missing return value with constexpr if
@@ -201,12 +217,14 @@ GPUdi() int GPUCommonMath::Nint(float x)
   int i;
   if (x >= 0) {
     i = int(x + 0.5f);
-    if (x + 0.5f == float(i) && i & 1)
+    if (x + 0.5f == float(i) && i & 1) {
       i--;
+    }
   } else {
     i = int(x - 0.5f);
-    if (x - 0.5f == float(i) && i & 1)
+    if (x - 0.5f == float(i) && i & 1) {
       i++;
+    }
   }
   return i;
 }
@@ -225,21 +243,21 @@ GPUhdi() void GPUCommonMath::SinCos(float x, float& s, float& c)
 {
 #if !defined(GPUCA_GPUCODE_DEVICE) && defined(__APPLE__)
   __sincosf(x, &s, &c);
-#elif !defined(GPUCA_GPUCODE_DEVICE) && defined(__GNU_SOURCE__)
+#elif !defined(GPUCA_GPUCODE_DEVICE) && (defined(__GNU_SOURCE__) || defined(_GNU_SOURCE) || defined(GPUCA_GPUCODE))
   sincosf(x, &s, &c);
 #else
-  CHOICE({s = sin(x); c = cos(x); }, sincosf(x, &s, &c), s = sincos(x, &c));
+  CHOICE((void)((s = sinf(x)) + (c = cosf(x))), sincosf(x, &s, &c), s = sincos(x, &c));
 #endif
 }
 
-GPUhdi() void GPUCommonMath::SinCos(double x, double& s, double& c)
+GPUhdi() void GPUCommonMath::SinCosd(double x, double& s, double& c)
 {
 #if !defined(GPUCA_GPUCODE_DEVICE) && defined(__APPLE__)
   __sincos(x, &s, &c);
-#elif !defined(GPUCA_GPUCODE_DEVICE) && defined(__GNU_SOURCE__)
+#elif !defined(GPUCA_GPUCODE_DEVICE) && (defined(__GNU_SOURCE__) || defined(_GNU_SOURCE) || defined(GPUCA_GPUCODE))
   sincos(x, &s, &c);
 #else
-  CHOICE({s = sin(x); c = cos(x); }, sincos(x, &s, &c), s = sincos(x, &c));
+  CHOICE((void)((s = sin(x)) + (c = cos(x))), sincos(x, &s, &c), s = sincos(x, &c));
 #endif
 }
 
@@ -262,7 +280,8 @@ GPUdi() unsigned int GPUCommonMath::Clz(unsigned int x)
 GPUdi() unsigned int GPUCommonMath::Popcount(unsigned int x)
 {
 #if (defined(__GNUC__) || defined(__clang__) || defined(__CUDACC__) || defined(__HIPCC__)) && (!defined(__OPENCL__) /*|| defined(__OPENCLCPP__)*/) // TODO: remove OPENCLCPP workaround when reported SPIR-V bug is fixed
-  return CHOICE(__builtin_popcount(x), __popc(x), __builtin_popcount(x));                                                                          // use builtin if available
+  // use builtin if available
+  return CHOICE(__builtin_popcount(x), __popc(x), __builtin_popcount(x));
 #else
   unsigned int retVal = 0;
   for (int i = 0; i < 32; i++) {
@@ -376,6 +395,20 @@ GPUhdi() float GPUCommonMath::Copysign(float x, float y)
   return copysignf(x, y);
 #elif defined(__cplusplus) && __cplusplus >= 201103L
   return std::copysignf(x, y);
+#else
+  x = GPUCommonMath::Abs(x);
+  return (y >= 0) ? x : -x;
+#endif // GPUCA_GPUCODE
+}
+
+GPUhdi() double GPUCommonMath::Copysignd(double x, double y)
+{
+#if defined(__OPENCLCPP__)
+  return copysign(x, y);
+#elif defined(GPUCA_GPUCODE) && !defined(__OPENCL__)
+  return copysignf(x, y);
+#elif defined(__cplusplus) && __cplusplus >= 201103L
+  return std::copysign(x, y);
 #else
   x = GPUCommonMath::Abs(x);
   return (y >= 0) ? x : -x;

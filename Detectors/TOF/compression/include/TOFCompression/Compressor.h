@@ -33,8 +33,8 @@ class Compressor
 {
 
  public:
-  Compressor() = default;
-  ~Compressor() = default;
+  Compressor() { mDecoderSaveBuffer = new char[mDecoderSaveBufferSize]; };
+  ~Compressor() { delete[] mDecoderSaveBuffer; };
 
   inline bool run()
   {
@@ -44,15 +44,18 @@ class Compressor
       while (mDecoderPointer < mDecoderPointerMax) {
         mEventCounter++;
         processDRM();
-        if (mDecoderFatal)
+        if (mDecoderFatal) {
           mFatalCounter++;
-        if (mDecoderError)
+        }
+        if (mDecoderError) {
           mErrorCounter++;
+        }
       }
       return false;
     }
-    while (!processHBF())
+    while (!processHBF()) {
       ;
+    }
     return false;
   };
 
@@ -121,7 +124,8 @@ class Compressor
   bool mDecoderVerbose = false;
   bool mDecoderError = false;
   bool mDecoderFatal = false;
-  char mDecoderSaveBuffer[1048576];
+  char* mDecoderSaveBuffer = nullptr;
+  const int mDecoderSaveBufferSize = 33554432;
   uint32_t mDecoderSaveBufferDataSize = 0;
   uint32_t mDecoderSaveBufferDataLeft = 0;
 
@@ -199,7 +203,9 @@ class Compressor
     uint8_t trmErrors[10][2];
     bool hasHits[10][2];
     bool hasErrors[10][2];
-    bool decodeError;
+    bool drmDecodeError;
+    bool ltmDecodeError;
+    bool trmDecodeError[10];
   } mDecoderSummary = {nullptr};
 
   struct SpiderSummary_t {

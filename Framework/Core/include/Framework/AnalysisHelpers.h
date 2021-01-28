@@ -64,7 +64,7 @@ struct WritingCursor<soa::Table<PC...>> {
   /// spend time reallocating the buffers.
   void reserve(int64_t size)
   {
-    mBuilder->reserve(typename persistent_table_t::columns{}, size);
+    mBuilder->reserve(typename persistent_table_t::column_types{}, size);
   }
 
   decltype(FFL(std::declval<cursor_t>())) cursor;
@@ -169,6 +169,7 @@ struct TableTransform {
 template <typename T>
 struct Spawns : TableTransform<typename aod::MetadataTrait<framework::pack_head_t<typename T::originals>>::metadata> {
   using extension_t = framework::pack_head_t<typename T::originals>;
+  using base_table_t = typename aod::MetadataTrait<extension_t>::metadata::base_table_t;
   using expression_pack_t = typename aod::MetadataTrait<extension_t>::metadata::expression_pack_t;
 
   constexpr auto pack()
@@ -366,18 +367,20 @@ template <typename T>
 struct OutputObj {
   using obj_t = T;
 
-  OutputObj(T&& t, OutputObjHandlingPolicy policy_ = OutputObjHandlingPolicy::AnalysisObject)
+  OutputObj(T&& t, OutputObjHandlingPolicy policy_ = OutputObjHandlingPolicy::AnalysisObject, OutputObjSourceType sourceType_ = OutputObjSourceType::OutputObjSource)
     : object(std::make_shared<T>(t)),
       label(t.GetName()),
       policy{policy_},
+      sourceType{sourceType_},
       mTaskHash{0}
   {
   }
 
-  OutputObj(std::string const& label_, OutputObjHandlingPolicy policy_ = OutputObjHandlingPolicy::AnalysisObject)
+  OutputObj(std::string const& label_, OutputObjHandlingPolicy policy_ = OutputObjHandlingPolicy::AnalysisObject, OutputObjSourceType sourceType_ = OutputObjSourceType::OutputObjSource)
     : object(nullptr),
       label(label_),
       policy{policy_},
+      sourceType{sourceType_},
       mTaskHash{0}
   {
   }
@@ -438,12 +441,13 @@ struct OutputObj {
   OutputRef ref()
   {
     return OutputRef{std::string{label}, 0,
-                     o2::header::Stack{OutputObjHeader{policy, mTaskHash}}};
+                     o2::header::Stack{OutputObjHeader{policy, sourceType, mTaskHash}}};
   }
 
   std::shared_ptr<T> object;
   std::string label;
   OutputObjHandlingPolicy policy;
+  OutputObjSourceType sourceType;
   uint32_t mTaskHash;
 };
 
@@ -483,6 +487,13 @@ template <typename T>
 struct Partition {
   Partition(expressions::Node&& filter_) : filter{std::move(filter_)}
   {
+  }
+
+  void bindTable(T& table)
+  {
+    mFiltered.reset(getTableFromFilter(table, filter));
+    bindExternalIndices(&table);
+    getBoundToExternalIndices(table);
   }
 
   void setTable(const T& table)
@@ -540,5 +551,27 @@ struct Partition {
 };
 
 } // namespace o2::framework
+
+namespace o2::soa
+{
+/// On-the-fly adding of expression columns
+template <typename T, typename... Cs>
+auto Extend(T const& table)
+{
+  static_assert((soa::is_type_spawnable_v<Cs> && ...), "You can only extend a table with expression columns");
+  using output_t = Join<T, soa::Table<Cs...>>;
+  return output_t{{o2::framework::spawner(framework::pack<Cs...>{}, table.asArrowTable().get()), table.asArrowTable()}, 0};
+}
+
+/// Template function to attach dynamic columns on-the-fly (e.g. inside
+/// process() function). Dynamic columns need to be compatible with the table.
+template <typename T, typename... Cs>
+auto Attach(T const& table)
+{
+  static_assert((framework::is_base_of_template<o2::soa::DynamicColumn, Cs>::value && ...), "You can only attach dynamic columns");
+  using output_t = Join<T, o2::soa::Table<Cs...>>;
+  return output_t{{table.asArrowTable()}, table.offset()};
+}
+} // namespace o2::soa
 
 #endif // o2_framework_AnalysisHelpers_H_DEFINED
